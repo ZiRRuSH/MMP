@@ -1,6 +1,4 @@
--- MaliMusicPlayer 0.7.2 Experimental
--- Working 0.6.2 Experimental 2 design plus a standalone Warlock minimap button.
--- Keep your trusted 0.6.1 and working 0.6.2.x2 copies outside the addon folder.
+-- MaliMusicPlayer 0.7.8 Experimental
 local tracks=MaliMusicPlayerLibrary or {}
 local db,current,selected,started=nil,nil,1,0
 local playing,loading,soundHandle=false,false,nil
@@ -8,20 +6,14 @@ local refresh,play,advance,sync,setCompact,togglePlayer,showTab
 local filtered,rows,compactButtons={},{},{}
 local function say(s) print("|cff70cfffMaliMusicPlayer:|r "..s) end
 local function safe(s) return (tostring(s or ""):gsub("|","||")) end
-local function label(t)
- return (t.artist and t.artist~="" and t.artist.." - " or "")..(t.title or "Untitled")
-end
+local function label(t) return (t.artist and t.artist~="" and t.artist.." - " or "")..(t.title or "Untitled") end
 local function clock(n)
  n=math.max(0,math.floor(n or 0))
  if n>=3600 then return string.format("%d:%02d:%02d",math.floor(n/3600),math.floor(n/60)%60,n%60) end
  return string.format("%d:%02d",math.floor(n/60),n%60)
 end
-local function opacity(value,minimum,default)
- return math.max(minimum,math.min(1,tonumber(value) or default))
-end
-local function stopHandle()
- if soundHandle then StopSound(soundHandle);soundHandle=nil end
-end
+local function opacity(value,minimum,default) return math.max(minimum,math.min(1,tonumber(value) or default)) end
+local function stopHandle() if soundHandle then StopSound(soundHandle);soundHandle=nil end end
 local function font(parent,template,x,y,width)
  local s=parent:CreateFontString(nil,"OVERLAY",template)
  s:SetPoint("TOPLEFT",x,y);s:SetWidth(width);s:SetJustifyH("LEFT");return s
@@ -41,11 +33,11 @@ local function savePosition(self,key)
  if db then local p,_,rp,x,y=self:GetPoint();db[key]={p,rp,x,y} end
 end
 local f=CreateFrame("Frame","MaliMusicPlayerFrame",UIParent,"BasicFrameTemplateWithInset")
-f:SetSize(610,520);f:SetPoint("CENTER");f:SetMovable(true);f:EnableMouse(true)
+f:SetSize(610,610);f:SetPoint("CENTER");f:SetMovable(true);f:EnableMouse(true)
 f:SetClampedToScreen(true);f:RegisterForDrag("LeftButton")
 f:SetScript("OnDragStart",f.StartMoving)
 f:SetScript("OnDragStop",function(self) savePosition(self,"position") end)
-f.TitleText:SetText("MaliMusicPlayer 0.7.2 Experimental")
+f.TitleText:SetText("MaliMusicPlayer 0.7.8 Experimental")
 f:Hide();table.insert(UISpecialFrames,"MaliMusicPlayerFrame")
 local now=font(f,"GameFontHighlight",16,-38,575)
 local timing=font(f,"GameFontNormalSmall",16,-64,575);timing:SetText("Stopped")
@@ -103,42 +95,60 @@ for i=1,9 do
  rows[i]=b
 end
 local compact=CreateFrame("Frame","MaliMusicPlayerCompact",UIParent)
-compact:SetSize(300,56);compact:SetPoint("CENTER",UIParent,"CENTER",0,-180)
-compact:SetMovable(true);compact:EnableMouse(true);compact:SetClampedToScreen(true)
-compact:Hide();table.insert(UISpecialFrames,"MaliMusicPlayerCompact")
+compact:SetSize(210,56);compact:SetPoint("CENTER",UIParent,"CENTER",0,-180)
+compact:SetMovable(true);compact:EnableMouse(true);compact:SetClampedToScreen(true);compact:Hide()
 local compactBG=compact:CreateTexture(nil,"BACKGROUND");compactBG:SetAllPoints()
 local titleViewport=CreateFrame("ScrollFrame",nil,compact)
-titleViewport:SetPoint("TOPLEFT",9,-7);titleViewport:SetSize(252,17);titleViewport:EnableMouse(true)
-local titleChild=CreateFrame("Frame",nil,titleViewport);titleChild:SetSize(252,17);titleChild:EnableMouse(false);titleViewport:SetScrollChild(titleChild)
+titleViewport:SetPoint("TOPLEFT",9,-7);titleViewport:SetSize(162,17);titleViewport:EnableMouse(true)
+local titleChild=CreateFrame("Frame",nil,titleViewport);titleChild:SetSize(162,17);titleChild:EnableMouse(false);titleViewport:SetScrollChild(titleChild)
 local title=titleChild:CreateFontString(nil,"OVERLAY","GameFontHighlightSmall")
 local fontPath=title:GetFont();title:SetFont(fontPath,11,"")
 title:SetPoint("LEFT",titleChild,"LEFT",0,0);title:SetWordWrap(false)
-local compactTime=font(compact,"GameFontNormalSmall",10,-34,180)
+local compactTime=font(compact,"GameFontNormalSmall",10,-34,110)
 local timeFont=compactTime:GetFont();compactTime:SetFont(timeFont,11,"");compactTime:SetText("Stopped")
 local compactMoving=false
 local function finishCompactMove()
  if not compactMoving then return end
  compactMoving=false;savePosition(compact,"compactPosition")
 end
+local titleRepeat=titleChild:CreateFontString(nil,"OVERLAY","GameFontHighlightSmall")
+titleRepeat:SetFont(fontPath,11,"");titleRepeat:SetWordWrap(false);titleRepeat:Hide()
 local marqueeText,marqueeLimit,marqueePos,marqueeDirection,marqueeWait,marqueeTick=nil,0,0,1,2,0
+local marqueeCycle=0
+local function loopingTitle() return not db or db.compactScrollMode~="bounce" end
+local function resetMarquee()
+ local width=math.ceil(title:GetStringWidth())
+ local viewportWidth=titleViewport:GetWidth()
+ marqueeLimit=math.max(0,width-viewportWidth)
+ marqueePos=0;marqueeDirection=1;marqueeWait=2;marqueeTick=0
+ title:SetWidth(math.max(width,1))
+ titleRepeat:SetText(marqueeText or "");titleRepeat:SetWidth(math.max(width,1))
+ marqueeCycle=width+40
+ titleRepeat:ClearAllPoints();titleRepeat:SetPoint("LEFT",titleChild,"LEFT",marqueeCycle,0)
+ local looping=loopingTitle() and marqueeLimit>0
+ titleRepeat:SetShown(looping)
+ titleChild:SetWidth(looping and (marqueeCycle+width) or math.max(viewportWidth,width))
+ titleViewport:UpdateScrollChildRect();titleViewport:SetHorizontalScroll(0)
+end
 local function setTitle(value)
  if value==marqueeText then return end
- marqueeText=value;title:SetWidth(0);title:SetText(value)
- local width=math.ceil(title:GetStringWidth())
- title:SetWidth(math.max(width,1));titleChild:SetWidth(math.max(252,width));titleViewport:UpdateScrollChildRect()
- marqueeLimit=math.max(0,width-252);marqueePos=0;marqueeDirection=1;marqueeWait=2;marqueeTick=0
- titleViewport:SetHorizontalScroll(0)
+ marqueeText=value;title:SetWidth(0);title:SetText(value);resetMarquee()
 end
 compact:SetScript("OnUpdate",function(self,elapsed)
  if compactMoving and not IsMouseButtonDown("LeftButton") then finishCompactMove() end
  if marqueeLimit<=0 then return end
- if marqueeWait>0 then marqueeWait=math.max(0,marqueeWait-elapsed);return end
+ local looping=loopingTitle()
+ if not looping and marqueeWait>0 then marqueeWait=math.max(0,marqueeWait-elapsed);return end
  marqueeTick=marqueeTick+elapsed;if marqueeTick<1/30 then return end
  local delta=math.min(marqueeTick,0.1);marqueeTick=0
- marqueePos=marqueePos+marqueeDirection*24*delta
- if marqueePos>=marqueeLimit then marqueePos=marqueeLimit;marqueeDirection=-1;marqueeWait=2
- elseif marqueePos<=0 then marqueePos=0;marqueeDirection=1;marqueeWait=2 end
- titleViewport:SetHorizontalScroll(0)
+ if looping then
+  marqueePos=(marqueePos+24*delta)%marqueeCycle
+ else
+  marqueePos=marqueePos+marqueeDirection*24*delta
+  if marqueePos>=marqueeLimit then marqueePos=marqueeLimit;marqueeDirection=-1;marqueeWait=2
+  elseif marqueePos<=0 then marqueePos=0;marqueeDirection=1;marqueeWait=2 end
+ end
+ titleViewport:SetHorizontalScroll(marqueePos)
 end)
 local function applyOpacity()
  local hovered=false
@@ -147,7 +157,7 @@ local function applyOpacity()
   b:SetAlpha(b.hovered and 1 or opacity(db and db.compactButtonOpacity,0.2,1))
  end
  local textAlpha=hovered and 1 or opacity(db and db.compactTextOpacity,0.2,0.95)
- title:SetAlpha(textAlpha);compactTime:SetAlpha(textAlpha)
+ title:SetAlpha(textAlpha);titleRepeat:SetAlpha(textAlpha);compactTime:SetAlpha(textAlpha)
  compactBG:SetColorTexture(0.025,0.025,0.025,opacity(db and db.compactBackground,0,0.35))
 end
 local function hoverHandlers(b,tooltip)
@@ -237,9 +247,9 @@ sync=function()
  shuffle:SetText(db and db.shuffle and "Shuffle: On" or "Shuffle: Off")
  repeatButton:SetText(db and db.repeatTrack and "Repeat: On" or "Repeat: Off")
 end
-local volumeLabel=font(f,"GameFontNormalSmall",18,-477,160)
+local volumeLabel=font(f,"GameFontNormalSmall",18,-578,160)
 local volume=CreateFrame("Slider",nil,f,"OptionsSliderTemplate")
-volume:SetPoint("TOPLEFT",180,-475);volume:SetSize(310,16);volume:SetMinMaxValues(0,100);volume:SetValueStep(1)
+volume:SetPoint("TOPLEFT",180,-576);volume:SetSize(310,16);volume:SetMinMaxValues(0,100);volume:SetValueStep(1)
 if volume.SetObeyStepOnDrag then volume:SetObeyStepOnDrag(true) end
 local updatingVolume=false
 local function syncVolume()
@@ -256,16 +266,40 @@ setCompact=function(enabled)
  if db then db.compactMode=enabled end
  if enabled then f:Hide();applyOpacity();compact:Show() else compact:Hide();f:Show() end
 end
+-- Closing the full player during playback restores compact without restarting audio.
+f:HookScript("OnHide",function()
+ if not playing then return end
+ if db then db.compactMode=true end
+ applyOpacity();compact:Show()
+end)
 togglePlayer=function()
- if f:IsShown() or compact:IsShown() then f:Hide();compact:Hide()
- elseif db and db.compactMode then setCompact(true)
- else showTab("library");setCompact(false) end
+ if f:IsShown() then
+  f:Hide()
+ elseif compact:IsShown() then
+  compact:Hide()
+ elseif db and db.compactMode then
+  setCompact(true)
+ else
+  showTab("library");setCompact(false)
+ end
 end
-button(f,"Compact",500,-474,92,function() setCompact(true) end)
-iconButton(269,-4,"Interface/Buttons/UI-PlusButton-UP","Open full player",function() showTab("library");setCompact(false) end)
-iconButton(218,-29,"Interface/Buttons/UI-SpellbookIcon-PrevPage-Up","Previous track",function() advance(-1,false) end)
-iconButton(244,-29,nil,"Stop playback",stop)
-iconButton(270,-29,"Interface/Buttons/UI-SpellbookIcon-NextPage-Up","Next track",function() advance(1,false) end)
+button(f,"Compact",500,-575,92,function() setCompact(true) end)
+local expandButton=iconButton(179,-4,"Interface/Buttons/UI-PlusButton-UP","Open full player",function() showTab("library");setCompact(false) end)
+local previousButton=iconButton(128,-29,"Interface/Buttons/UI-SpellbookIcon-PrevPage-Up","Previous track",function() advance(-1,false) end)
+local stopButton=iconButton(154,-29,nil,"Stop playback",stop)
+local nextButton=iconButton(180,-29,"Interface/Buttons/UI-SpellbookIcon-NextPage-Up","Next track",function() advance(1,false) end)
+local function compactWidth(value)
+ return math.max(180,math.min(360,math.floor((tonumber(value) or 210)+0.5)))
+end
+local function applyCompactWidth(value)
+ local width=compactWidth(value)
+ compact:SetWidth(width);titleViewport:SetWidth(width-48);compactTime:SetWidth(width-100)
+ expandButton:ClearAllPoints();expandButton:SetPoint("TOPRIGHT",compact,"TOPRIGHT",-8,-4)
+ previousButton:ClearAllPoints();previousButton:SetPoint("TOPRIGHT",compact,"TOPRIGHT",-59,-29)
+ stopButton:ClearAllPoints();stopButton:SetPoint("TOPRIGHT",compact,"TOPRIGHT",-33,-29)
+ nextButton:ClearAllPoints();nextButton:SetPoint("TOPRIGHT",compact,"TOPRIGHT",-7,-29)
+ resetMarquee()
+end
 font(settings,"GameFontNormal",20,-147,555):SetText("Compact appearance")
 local opacityInitializing=false
 local function opacityControl(y,caption,key,minimum)
@@ -283,18 +317,41 @@ local backgroundSlider=opacityControl(-174,"Background opacity","compactBackgrou
 local textSlider=opacityControl(-204,"Text opacity","compactTextOpacity",20)
 local buttonSlider=opacityControl(-234,"Button opacity","compactButtonOpacity",20)
 font(settings,"GameFontDisableSmall",24,-264,550):SetText("Hover a compact button to brighten it and the title / timer to 100%.")
-font(settings,"GameFontNormal",20,-287,555):SetText("Commands / compact shortcuts")
-local help=font(settings,"GameFontHighlightSmall",24,-309,555)
-help:SetText("/mmp - Show / hide  |  /mmp full  |  /mmp compact\n/mmp play  |  stop  |  next  |  prev\nCompact title / background: left-drag to move; right-click for quick controls.\nMinimap: left-click toggles; right-click opens home; drag to reposition.")
+font(settings,"GameFontHighlightSmall",24,-285,240):SetText("Title scrolling")
+local scrollModeButton
+local function syncScrollMode()
+ scrollModeButton:SetText(loopingTitle() and "Continuous loop" or "Back-and-forth")
+end
+scrollModeButton=button(settings,"Continuous loop",280,-280,270,function()
+ if not db then return end
+ db.compactScrollMode=loopingTitle() and "bounce" or "loop"
+ syncScrollMode();resetMarquee()
+end)
+font(settings,"GameFontDisableSmall",24,-310,550):SetText("Click to switch styles. Short titles stay still; your choice is saved.")
+local widthLabel=font(settings,"GameFontHighlightSmall",24,-338,240)
+local widthSlider=CreateFrame("Slider",nil,settings,"OptionsSliderTemplate")
+widthSlider:SetPoint("TOPLEFT",280,-336);widthSlider:SetSize(270,16)
+widthSlider:SetMinMaxValues(180,360);widthSlider:SetValueStep(1)
+if widthSlider.SetObeyStepOnDrag then widthSlider:SetObeyStepOnDrag(true) end
+widthSlider:SetScript("OnValueChanged",function(self,value)
+ local width=compactWidth(value)
+ widthLabel:SetText("Compact width: "..width.." px")
+ if db and not opacityInitializing then db.compactWidth=width end
+ applyCompactWidth(width)
+end)
+font(settings,"GameFontDisableSmall",24,-363,550):SetText("180-360 px. Default: 210 px. Width updates immediately and is saved.")
+font(settings,"GameFontNormal",20,-389,555):SetText("Commands / compact shortcuts")
+local help=font(settings,"GameFontHighlightSmall",24,-409,555)
+help:SetText("/mmp - Toggle view; closing full during playback returns to compact\n/mmp full  |  compact  |  play  |  stop  |  next  |  prev\nCompact title / background: left-drag to move; right-click for quick controls.\nMinimap: click to open full Library view; drag to reposition.")
 help:SetSpacing(2)
-font(settings,"GameFontNormal",20,-377,555):SetText("About")
-font(settings,"GameFontHighlightSmall",24,-397,555):SetText("MaliMusicPlayer v0.7.2 Experimental - By Mali Gnosis, for Mali Gnosis.")
-local quote=font(settings,"GameFontHighlightSmall",24,-420,555)
+font(settings,"GameFontNormal",20,-475,555):SetText("About")
+font(settings,"GameFontHighlightSmall",24,-494,555):SetText("MaliMusicPlayer v0.7.8 Experimental - By Mali Gnosis, for Mali Gnosis.")
+local quote=font(settings,"GameFontHighlightSmall",24,-513,555)
 quote:SetWordWrap(false)
 quote:SetText('"If I throw a dog a bone, I don\'t want to know if it tastes good or not." - Brick Top')
 local quoteFont=quote:GetFont()
 for size=11,8,-0.5 do quote:SetFont(quoteFont,size,"");if quote:GetStringWidth()<=555 then break end end
-font(settings,"GameFontDisableSmall",24,-447,555):SetText("Released under the MIT License. See LICENSE.MD for details.")
+font(settings,"GameFontDisableSmall",24,-550,555):SetText("Released under the MIT License. See LICENSE.MD for details.")
 showTab("library")
 local menu=CreateFrame("Frame","MaliMusicPlayerQuickControls",compact)
 menu:SetSize(244,256);menu:SetFrameStrata("DIALOG");menu:SetClampedToScreen(true);menu:EnableMouse(true);menu:Hide()
@@ -302,9 +359,7 @@ table.insert(UISpecialFrames,"MaliMusicPlayerQuickControls")
 local menuBG=menu:CreateTexture(nil,"BACKGROUND");menuBG:SetAllPoints();menuBG:SetColorTexture(0.025,0.025,0.035,0.98)
 font(menu,"GameFontNormal",10,-10,224):SetText("MaliMusicPlayer - Quick controls")
 local menuTrack=font(menu,"GameFontHighlightSmall",10,-32,224);menuTrack:SetWordWrap(false)
-local function action(y,text,fn)
- return button(menu,text,8,y,228,function() menu:Hide();fn() end)
-end
+local function action(y,text,fn) return button(menu,text,8,y,228,function() menu:Hide();fn() end) end
 action(-55,"Play / restart current track",function() play(current or selected) end)
 action(-82,"Stop",stop)
 action(-109,"Previous track",function() advance(-1,false) end)
@@ -341,8 +396,6 @@ for _,surface in ipairs({compact,titleViewport}) do
  surface:SetScript("OnMouseUp",compactMouseUp)
 end
 compact:HookScript("OnHide",function() finishCompactMove();menu:Hide();GameTooltip:Hide() end)
-
--- Standalone minimap launcher: no broker libraries, custom image or TOC edit.
 local minimapButton
 local function createMinimapButton()
  if minimapButton or not Minimap then return end
@@ -371,37 +424,30 @@ local function createMinimapButton()
   if dx==0 and dy==0 then return end
   local a
   if dx==0 then a=dy>0 and math.pi/2 or -math.pi/2
-  else
-   a=math.atan(dy/dx)
-   if dx<0 then a=a+math.pi end
-  end
+  else a=math.atan(dy/dx);if dx<0 then a=a+math.pi end end
   angle=math.deg(a)%360;position()
  end
  local function finishDrag()
   if not dragging then return end
-  dragging=false
-  if db then db.minimapAngle=angle end
+  dragging=false;if db then db.minimapAngle=angle end
  end
  b:SetScript("OnMouseDown",function(self,which) if which=="LeftButton" then wasDragged=false end end)
  b:SetScript("OnDragStart",function() dragging=true;wasDragged=true;GameTooltip:Hide();cursorAngle() end)
  b:SetScript("OnDragStop",finishDrag)
  b:SetScript("OnMouseUp",function(self,which) if which=="LeftButton" then finishDrag() end end)
  b:SetScript("OnUpdate",function()
-  if dragging then
-   cursorAngle()
-   if not IsMouseButtonDown("LeftButton") then finishDrag() end
-  end
+  if dragging then cursorAngle();if not IsMouseButtonDown("LeftButton") then finishDrag() end end
  end)
  b:SetScript("OnClick",function(self,which)
   if wasDragged then return end
-  if which=="RightButton" then showTab("library");setCompact(false) else togglePlayer() end
+  showTab("library");setCompact(false)
  end)
  b:SetScript("OnEnter",function(self)
   if dragging then return end
   GameTooltip:SetOwner(self,"ANCHOR_LEFT");GameTooltip:SetText("MaliMusicPlayer")
   if current then GameTooltip:AddLine((playing and "Playing: " or "Stopped: ")..safe(label(tracks[current])),1,1,1,true) end
-  GameTooltip:AddLine("Left-click: show / hide preferred view",0.75,0.85,1)
-  GameTooltip:AddLine("Right-click: open home base",0.75,0.85,1)
+  GameTooltip:AddLine("Left-click: open full Library view",0.75,0.85,1)
+  GameTooltip:AddLine("Right-click: open full Library view",0.75,0.85,1)
   GameTooltip:AddLine("Left-drag: move around minimap",0.75,0.85,1)
   GameTooltip:Show()
  end)
@@ -438,12 +484,23 @@ events:SetScript("OnEvent",function(self,event,name)
   db.compactBackground=opacity(db.compactBackground,0,0.35)
   db.compactTextOpacity=opacity(db.compactTextOpacity,0.2,0.95)
   db.compactButtonOpacity=opacity(db.compactButtonOpacity,0.2,1)
+  -- Keep the 0.7.7 migration marker so upgrading does not reset later choices.
+  if not db.compactDefaults077 then
+   db.compactScrollMode="loop";db.compactDefaults077=true
+  elseif db.compactScrollMode~="loop" and db.compactScrollMode~="bounce" then
+   db.compactScrollMode="loop"
+  end
+  db.compactWidth=compactWidth(db.compactWidth)
+  syncScrollMode()
   restorePosition(f,"position");restorePosition(compact,"compactPosition")
+  applyCompactWidth(db.compactWidth)
   sync();rebuild();syncVolume();opacityInitializing=true
   backgroundSlider:SetValue(db.compactBackground*100);textSlider:SetValue(db.compactTextOpacity*100);buttonSlider:SetValue(db.compactButtonOpacity*100)
+  widthSlider:SetValue(db.compactWidth)
+  widthLabel:SetText("Compact width: "..db.compactWidth.." px")
   opacityInitializing=false;applyOpacity()
   local unknown=0;for _,t in ipairs(tracks) do if (t.duration or 0)<=0 then unknown=unknown+1 end end
-  say("v0.7.2 Experimental: "..#tracks.." tracks; "..unknown.." unknown durations. /mmp to open.")
+  say("v0.7.8 Experimental: "..#tracks.." tracks; "..unknown.." unknown durations. /mmp to open.")
  elseif event=="PLAYER_LOGIN" then registerOptionsPanel();createMinimapButton()
  elseif event=="LOADING_SCREEN_ENABLED" then loading=true
  elseif event=="LOADING_SCREEN_DISABLED" then
