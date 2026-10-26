@@ -1,4 +1,4 @@
--- MaliMusicPlayer 0.7.9.6
+-- MaliMusicPlayer 0.8.0
 local tracks=MaliMusicPlayerLibrary or {}
 local db,current,selected,started=nil,nil,1,0
 local playing,loading,soundHandle=false,false,nil
@@ -46,7 +46,7 @@ f:SetSize(610,610);f:SetPoint("CENTER");f:SetMovable(true);f:EnableMouse(true)
 f:SetClampedToScreen(true);f:RegisterForDrag("LeftButton")
 f:SetScript("OnDragStart",f.StartMoving)
 f:SetScript("OnDragStop",function(self) savePosition(self,"position") end)
-f.TitleText:SetText("MaliMusicPlayer 0.7.9.6")
+f.TitleText:SetText("MaliMusicPlayer 0.8.0")
 f:Hide();table.insert(UISpecialFrames,"MaliMusicPlayerFrame")
 local now=font(f,"GameFontHighlight",16,-38,575)
 local timing=font(f,"GameFontNormalSmall",16,-64,575);timing:SetText("Stopped")
@@ -386,7 +386,7 @@ fullOpacitySlider:SetScript("OnValueChanged",function(self,value)
 end)
 font(settings,"GameFontDisableSmall",232,-453,330):SetText("Full player opacity: 33-100%; compact is separate.")
 font(settings,"GameFontNormal",20,-475,555):SetText("About")
-font(settings,"GameFontHighlightSmall",24,-494,555):SetText("MaliMusicPlayer v0.7.9.6 - By Mali Gnosis, for Mali Gnosis.")
+font(settings,"GameFontHighlightSmall",24,-494,555):SetText("MaliMusicPlayer v0.8.0 - By Mali Gnosis, for Mali Gnosis.")
 local quote=font(settings,"GameFontHighlightSmall",24,-513,555)
 quote:SetWordWrap(false)
 quote:SetText('"If I throw a dog a bone, I don\'t want to know if it tastes good or not." - Brick Top')
@@ -435,8 +435,59 @@ for _,surface in ipairs({compact,titleViewport}) do
  surface:SetScript("OnMouseDown",compactMouseDown);surface:SetScript("OnMouseUp",compactMouseUp)
 end
 compact:HookScript("OnHide",function() finishCompactMove();menu:Hide();GameTooltip:Hide() end)
+
+-- Optional integration: reuse libraries supplied by another installed addon.
+-- No bundled libraries or required dependencies; custom fallback remains available.
 local minimapButton
-local function createMinimapButton()
+local minimapBroker
+local minimapRetryFrame
+local MINIMAP_LAUNCHER="MaliMusicPlayer"
+local function openFromMinimap()
+ showTab("library");setCompact(false)
+end
+local function createStandardMinimapButton()
+ local stub=_G.LibStub
+ if not stub then return false end
+ local icon=stub:GetLibrary("LibDBIcon-1.0",true)
+ local broker=stub:GetLibrary("LibDataBroker-1.1",true)
+ if not icon or not broker or not db then return false end
+ if type(db.minimap)~="table" then db.minimap={} end
+ if tonumber(db.minimap.minimapPos)==nil then db.minimap.minimapPos=tonumber(db.minimapAngle) or 225 end
+ if db.minimap.hide==nil then db.minimap.hide=false end
+ local object=broker:GetDataObjectByName(MINIMAP_LAUNCHER)
+ if not object then
+  object=broker:NewDataObject(MINIMAP_LAUNCHER,{
+   type="launcher",
+   text="MaliMusicPlayer",
+   icon="Interface/ICONS/ClassIcon_Warlock",
+   OnClick=function(_,which)
+    if which=="LeftButton" or which=="RightButton" then openFromMinimap() end
+   end,
+   OnTooltipShow=function(tooltip)
+    tooltip:AddLine("MaliMusicPlayer")
+    if current and tracks[current] then
+     tooltip:AddLine((playing and "Playing: " or "Stopped: ")..safe(label(tracks[current])),1,1,1,true)
+    end
+    tooltip:AddLine("Left/right-click: open full Library view",0.75,0.85,1)
+    tooltip:AddLine("Left-drag: move around minimap",0.75,0.85,1)
+   end,
+  })
+ end
+ minimapBroker=object
+ if not icon:IsRegistered(MINIMAP_LAUNCHER) then icon:Register(MINIMAP_LAUNCHER,object,db.minimap)
+ else icon:Refresh(MINIMAP_LAUNCHER,db.minimap) end
+ local standard=icon:GetMinimapButton(MINIMAP_LAUNCHER)
+ if not standard then return false end
+ local old=minimapButton
+ if old and old~=standard then
+  old:SetScript("OnUpdate",nil);old:EnableMouse(false);old:Hide();old:SetParent(nil);old:ClearAllPoints()
+ end
+ minimapButton=standard
+ if minimapRetryFrame then minimapRetryFrame:UnregisterAllEvents() end
+ say("0.8.0 minimap: LibDBIcon active; Warlock launcher registered.")
+ return true
+end
+local function createFallbackMinimapButton()
  if minimapButton or not Minimap then return end
  local b=CreateFrame("Button","MaliMusicPlayerMinimapButton",Minimap);minimapButton=b
  b:SetSize(32,32);b:SetFrameStrata("MEDIUM");b:SetFrameLevel(Minimap:GetFrameLevel()+10)
@@ -447,9 +498,11 @@ local function createMinimapButton()
  local border=b:CreateTexture(nil,"OVERLAY")
  border:SetSize(54,54);border:SetPoint("TOPLEFT");border:SetTexture("Interface/Minimap/MiniMap-TrackingBorder")
  b:SetHighlightTexture("Interface/Minimap/UI-Minimap-ZoomButton-Highlight","ADD")
- local angle=tonumber(db and db.minimapAngle) or 225
+ local saved=db and type(db.minimap)=="table" and db.minimap.minimapPos
+ local angle=tonumber(saved) or tonumber(db and db.minimapAngle) or 225
  local dragging,wasDragged=false,false
  local function position()
+  if minimapButton~=b then return end
   local a=math.rad(angle);local rx=Minimap:GetWidth()/2+8;local ry=Minimap:GetHeight()/2+8
   b:ClearAllPoints();b:SetPoint("CENTER",Minimap,"CENTER",math.cos(a)*rx,math.sin(a)*ry)
  end
@@ -464,7 +517,12 @@ local function createMinimapButton()
  end
  local function finishDrag()
   if not dragging then return end
-  dragging=false;if db then db.minimapAngle=angle end
+  dragging=false
+  if db then
+   db.minimapAngle=angle
+   if type(db.minimap)~="table" then db.minimap={} end
+   db.minimap.minimapPos=angle
+  end
  end
  b:SetScript("OnMouseDown",function(self,which) if which=="LeftButton" then wasDragged=false end end)
  b:SetScript("OnDragStart",function() dragging=true;wasDragged=true;GameTooltip:Hide();cursorAngle() end)
@@ -473,22 +531,35 @@ local function createMinimapButton()
  b:SetScript("OnUpdate",function()
   if dragging then cursorAngle();if not IsMouseButtonDown("LeftButton") then finishDrag() end end
  end)
- b:SetScript("OnClick",function(self,which)
-  if wasDragged then return end
-  showTab("library");setCompact(false)
- end)
+ b:SetScript("OnClick",function() if not wasDragged then openFromMinimap() end end)
  b:SetScript("OnEnter",function(self)
   if dragging then return end
   GameTooltip:SetOwner(self,"ANCHOR_LEFT");GameTooltip:SetText("MaliMusicPlayer")
-  if current then GameTooltip:AddLine((playing and "Playing: " or "Stopped: ")..safe(label(tracks[current])),1,1,1,true) end
-  GameTooltip:AddLine("Left-click: open full Library view",0.75,0.85,1)
-  GameTooltip:AddLine("Right-click: open full Library view",0.75,0.85,1)
+  if current and tracks[current] then
+   GameTooltip:AddLine((playing and "Playing: " or "Stopped: ")..safe(label(tracks[current])),1,1,1,true)
+  end
+  GameTooltip:AddLine("Left/right-click: open full Library view",0.75,0.85,1)
   GameTooltip:AddLine("Left-drag: move around minimap",0.75,0.85,1);GameTooltip:Show()
  end)
  b:SetScript("OnLeave",function() GameTooltip:Hide() end)
  b:SetScript("OnHide",function() finishDrag();GameTooltip:Hide() end)
- Minimap:HookScript("OnSizeChanged",position);position();b:Show()
+ Minimap:HookScript("OnSizeChanged",position);position()
+ if not (db and type(db.minimap)=="table" and db.minimap.hide) then b:Show() else b:Hide() end
+ say("0.8.0 minimap: custom fallback; LibDBIcon/LibDataBroker not loaded. Warning may remain.")
 end
+local function createMinimapButton()
+ if minimapButton or minimapRetryFrame then return end
+ minimapRetryFrame=CreateFrame("Frame")
+ minimapRetryFrame:RegisterEvent("ADDON_LOADED")
+ minimapRetryFrame:SetScript("OnEvent",function()
+  C_Timer.After(0,function() createStandardMinimapButton() end)
+ end)
+ -- Run after all PLAYER_LOGIN handlers, so other addons can initialize first.
+ C_Timer.After(0,function()
+  if not createStandardMinimapButton() then createFallbackMinimapButton() end
+ end)
+end
+
 local function openPlayerSettings()
  if SettingsPanel and SettingsPanel:IsShown() then SettingsPanel:Hide() end
  if InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown() then InterfaceOptionsFrame:Hide() end
@@ -529,7 +600,7 @@ events:SetScript("OnEvent",function(self,event,name)
   fullOpacityLabel:SetText("Full player opacity: "..math.floor(db.fullPlayerOpacity*100+0.5).."%")
   f:SetAlpha(db.fullPlayerOpacity);opacityInitializing=false;applyOpacity()
   local unknown=0;for _,t in ipairs(tracks) do if (t.duration or 0)<=0 then unknown=unknown+1 end end
-  say("v0.7.9.6: "..#tracks.." tracks; "..unknown.." unknown durations. /mmp to open.")
+  say("v0.8.0: "..#tracks.." tracks; "..unknown.." unknown durations. /mmp to open.")
  elseif event=="PLAYER_LOGIN" then registerOptionsPanel();createMinimapButton()
  elseif event=="LOADING_SCREEN_ENABLED" then loading=true
  elseif event=="LOADING_SCREEN_DISABLED" then
