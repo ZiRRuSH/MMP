@@ -97,7 +97,6 @@ ZiRRuSH
 Mali Gnosis  
 Malignosis
 Infernia
-(all these are me)
 
 ## License
 
