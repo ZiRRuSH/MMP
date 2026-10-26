@@ -1,12 +1,23 @@
--- MaliMusicPlayer 0.7.8 Experimental
+-- MaliMusicPlayer 0.7.9.3
 local tracks=MaliMusicPlayerLibrary or {}
 local db,current,selected,started=nil,nil,1,0
 local playing,loading,soundHandle=false,false,nil
+local diagnostics=false
 local refresh,play,advance,sync,setCompact,togglePlayer,showTab
 local filtered,rows,compactButtons={},{},{}
+local VISIBLE_ROWS,ROW_HEIGHT=14,24
+local MIN_VOLUME_PERCENT=0.1
 local function say(s) print("|cff70cfffMaliMusicPlayer:|r "..s) end
+local function trace(s) if diagnostics then say("[audio] "..s) end end
 local function safe(s) return (tostring(s or ""):gsub("|","||")) end
 local function label(t) return (t.artist and t.artist~="" and t.artist.." - " or "")..(t.title or "Untitled") end
+local function musicVolume() return math.max(0,math.min(1,tonumber(GetCVar("Sound_MusicVolume")) or 0)) end
+local function sliderPercent(value)
+ return math.max(MIN_VOLUME_PERCENT,math.min(100,math.floor((tonumber(value) or MIN_VOLUME_PERCENT)*10+0.5)/10))
+end
+local function percentText(value)
+ return (string.format("%.1f",value):gsub("%.0$",""))
+end
 local function clock(n)
  n=math.max(0,math.floor(n or 0))
  if n>=3600 then return string.format("%d:%02d:%02d",math.floor(n/3600),math.floor(n/60)%60,n%60) end
@@ -37,7 +48,7 @@ f:SetSize(610,610);f:SetPoint("CENTER");f:SetMovable(true);f:EnableMouse(true)
 f:SetClampedToScreen(true);f:RegisterForDrag("LeftButton")
 f:SetScript("OnDragStart",f.StartMoving)
 f:SetScript("OnDragStop",function(self) savePosition(self,"position") end)
-f.TitleText:SetText("MaliMusicPlayer 0.7.8 Experimental")
+f.TitleText:SetText("MaliMusicPlayer 0.7.9.3")
 f:Hide();table.insert(UISpecialFrames,"MaliMusicPlayerFrame")
 local now=font(f,"GameFontHighlight",16,-38,575)
 local timing=font(f,"GameFontNormalSmall",16,-64,575);timing:SetText("Stopped")
@@ -81,12 +92,12 @@ local search=CreateFrame("EditBox",nil,library,"InputBoxTemplate")
 search:SetPoint("TOPLEFT",23,-142);search:SetSize(435,24);search:SetAutoFocus(false);search:SetMaxLetters(150)
 search:SetScript("OnEscapePressed",function(self) self:ClearFocus() end)
 search:SetScript("OnEnterPressed",function(self) self:ClearFocus() end)
-font(library,"GameFontNormalSmall",477,-149,110):SetText("Search library")
+local resultCount=font(library,"GameFontNormalSmall",477,-149,110);resultCount:SetText("0 tracks")
 local scroll=CreateFrame("ScrollFrame","MaliMusicPlayerScroll",library,"FauxScrollFrameTemplate")
-scroll:SetPoint("TOPLEFT",16,-178);scroll:SetSize(553,216)
-for i=1,9 do
+scroll:SetPoint("TOPLEFT",16,-178);scroll:SetSize(553,VISIBLE_ROWS*ROW_HEIGHT)
+for i=1,VISIBLE_ROWS do
  local b=CreateFrame("Button",nil,library)
- b:SetPoint("TOPLEFT",16,-178-(i-1)*24);b:SetSize(550,24)
+ b:SetPoint("TOPLEFT",16,-178-(i-1)*ROW_HEIGHT);b:SetSize(550,ROW_HEIGHT)
  b:SetHighlightTexture("Interface/QuestFrame/UI-QuestTitleHighlight","ADD")
  b.title=b:CreateFontString(nil,"OVERLAY","GameFontHighlightSmall")
  b.title:SetPoint("LEFT",4,0);b.title:SetWidth(470);b.title:SetJustifyH("LEFT")
@@ -141,8 +152,7 @@ compact:SetScript("OnUpdate",function(self,elapsed)
  if not looping and marqueeWait>0 then marqueeWait=math.max(0,marqueeWait-elapsed);return end
  marqueeTick=marqueeTick+elapsed;if marqueeTick<1/30 then return end
  local delta=math.min(marqueeTick,0.1);marqueeTick=0
- if looping then
-  marqueePos=(marqueePos+24*delta)%marqueeCycle
+ if looping then marqueePos=(marqueePos+24*delta)%marqueeCycle
  else
   marqueePos=marqueePos+marqueeDirection*24*delta
   if marqueePos>=marqueeLimit then marqueePos=marqueeLimit;marqueeDirection=-1;marqueeWait=2
@@ -194,7 +204,7 @@ local function updateTime()
  end
 end
 refresh=function()
- FauxScrollFrame_Update(scroll,#filtered,9,24)
+ FauxScrollFrame_Update(scroll,#filtered,VISIBLE_ROWS,ROW_HEIGHT)
  local offset=FauxScrollFrame_GetOffset(scroll)
  for i,b in ipairs(rows) do
   local index=filtered[offset+i];b.track=index
@@ -209,22 +219,32 @@ end
 local function rebuild()
  wipe(filtered);local q=string.lower(search:GetText() or "")
  for i,t in ipairs(tracks) do if q=="" or string.find(string.lower(label(t)),q,1,true) then filtered[#filtered+1]=i end end
+ if q=="" then resultCount:SetText(#tracks..(#tracks==1 and " track" or " tracks"))
+ else resultCount:SetText(#filtered.." of "..#tracks) end
  FauxScrollFrame_SetOffset(scroll,0);if scroll.ScrollBar then scroll.ScrollBar:SetValue(0) end;refresh()
 end
-scroll:SetScript("OnVerticalScroll",function(self,offset) FauxScrollFrame_OnVerticalScroll(self,offset,24,refresh) end)
+scroll:SetScript("OnVerticalScroll",function(self,offset) FauxScrollFrame_OnVerticalScroll(self,offset,ROW_HEIGHT,refresh) end)
 search:SetScript("OnTextChanged",rebuild)
 local function stop()
  playing=false;stopHandle();StopMusic()
- timing:SetText("Stopped");compactTime:SetText("Stopped");progress:SetValue(0);refresh()
+ timing:SetText("Stopped");compactTime:SetText("Stopped");progress:SetValue(0)
+ trace("Stop.");refresh()
 end
 play=function(index)
  if not tracks[index] then say("No tracks. Run UpdateLibrary.cmd, then restart WoW.");return end
- if GetCVar("Sound_EnableAllSound")=="0" or GetCVar("Sound_EnableMusic")=="0" then say("Enable sound and Music in WoW's audio settings.");return end
+ if GetCVar("Sound_EnableAllSound")=="0" or GetCVar("Sound_EnableMusic")=="0" then
+  say("Enable sound and Music in WoW's audio settings.");return
+ end
+ -- Do not silently alter an external mute or start a sound on a zero-volume channel.
+ if musicVolume()<=0 then
+  say("Music volume is 0% outside this player. Raise the slider, then press Play.");return
+ end
  stopHandle();playing=false;PlayMusic("Interface/AddOns/MaliMusicPlayer/Silence.ogg")
  local ok,handle=PlaySoundFile(tracks[index].path,"Music")
  current=index;selected=index
+ trace("Play: track="..index.." volume="..musicVolume().." success="..tostring(ok).." handle="..tostring(handle))
  if not ok or not handle then
-  StopMusic();timing:SetText("Playback failed. Check the file path and restart WoW after adding audio.")
+  StopMusic();timing:SetText("Playback failed. Check the file path / audio settings, then use Play to retry.")
   compactTime:SetText("Playback failed");progress:SetValue(0);refresh();say("Could not start: "..safe(label(tracks[index])));return
  end
  soundHandle=handle;started=GetTime();playing=true;updateTime();refresh()
@@ -237,51 +257,66 @@ advance=function(direction,automatic)
  else index=((index-1+direction)%#tracks)+1 end
  play(index)
 end
-button(library,"Previous",16,-405,88,function() advance(-1,false) end)
-button(library,"Play",110,-405,70,function() play(selected) end)
-button(library,"Stop",186,-405,70,stop)
-button(library,"Next",262,-405,70,function() advance(1,false) end)
-local shuffle=button(library,"Shuffle: Off",338,-405,120,function() if db then db.shuffle=not db.shuffle;sync() end end)
-local repeatButton=button(library,"Repeat: Off",464,-405,130,function() if db then db.repeatTrack=not db.repeatTrack;sync() end end)
+button(library,"Previous",16,-529,88,function() advance(-1,false) end)
+button(library,"Play",110,-529,70,function() play(selected) end)
+button(library,"Stop",186,-529,70,stop)
+button(library,"Next",262,-529,70,function() advance(1,false) end)
+local shuffle=button(library,"Shuffle: Off",338,-529,120,function() if db then db.shuffle=not db.shuffle;sync() end end)
+local repeatButton=button(library,"Repeat: Off",464,-529,130,function() if db then db.repeatTrack=not db.repeatTrack;sync() end end)
 sync=function()
  shuffle:SetText(db and db.shuffle and "Shuffle: On" or "Shuffle: Off")
  repeatButton:SetText(db and db.repeatTrack and "Repeat: On" or "Repeat: Off")
 end
 local volumeLabel=font(f,"GameFontNormalSmall",18,-578,160)
 local volume=CreateFrame("Slider",nil,f,"OptionsSliderTemplate")
-volume:SetPoint("TOPLEFT",180,-576);volume:SetSize(310,16);volume:SetMinMaxValues(0,100);volume:SetValueStep(1)
+volume:SetPoint("TOPLEFT",180,-576);volume:SetSize(310,16)
+volume:SetMinMaxValues(MIN_VOLUME_PERCENT,100);volume:SetValueStep(0.1)
 if volume.SetObeyStepOnDrag then volume:SetObeyStepOnDrag(true) end
 local updatingVolume=false
 local function syncVolume()
+ -- Programmatic synchronization must never write a rounded value back to the CVar.
  updatingVolume=true
- local v=(tonumber(GetCVar("Sound_MusicVolume")) or 0)*100
- volume:SetValue(v);volumeLabel:SetText("Music volume: "..math.floor(v+0.5).."%");updatingVolume=false
+ local actual=musicVolume()*100
+ volume:SetValue(sliderPercent(actual))
+ if actual<=0 then
+  volumeLabel:SetText("Music volume: 0% (external)")
+ elseif actual<MIN_VOLUME_PERCENT then
+  volumeLabel:SetText("Music volume: <0.1%")
+ else
+  volumeLabel:SetText("Music volume: "..percentText(actual).."%")
+ end
+ updatingVolume=false
 end
 volume:SetScript("OnValueChanged",function(self,value)
- value=math.floor(value+0.5);volumeLabel:SetText("Music volume: "..value.."%")
- if not updatingVolume then SetCVar("Sound_MusicVolume",value/100) end
+ if updatingVolume then return end
+ local percent=sliderPercent(value)
+ -- 0.1 percent / 100 is a 0.001 CVar value, not 0.1 (which would be 10 percent).
+ SetCVar("Sound_MusicVolume",percent/100)
+ trace("Slider: "..percentText(percent).."%; CVar="..musicVolume())
+ syncVolume()
 end)
+volume:SetScript("OnEnter",function(self)
+ GameTooltip:SetOwner(self,"ANCHOR_TOP");GameTooltip:SetText("Music volume")
+ GameTooltip:AddLine("0.1%-100%. The minimum is quiet, not mute. Use Stop for silence.",1,1,1,true)
+ GameTooltip:AddLine("Changing volume does not restart the track.",1,1,1,true);GameTooltip:Show()
+end)
+volume:SetScript("OnLeave",function() GameTooltip:Hide() end)
+volume:SetScript("OnHide",function() GameTooltip:Hide() end)
 f:SetScript("OnShow",syncVolume)
 setCompact=function(enabled)
  if db then db.compactMode=enabled end
  if enabled then f:Hide();applyOpacity();compact:Show() else compact:Hide();f:Show() end
 end
--- Closing the full player during playback restores compact without restarting audio.
 f:HookScript("OnHide",function()
  if not playing then return end
  if db then db.compactMode=true end
  applyOpacity();compact:Show()
 end)
 togglePlayer=function()
- if f:IsShown() then
-  f:Hide()
- elseif compact:IsShown() then
-  compact:Hide()
- elseif db and db.compactMode then
-  setCompact(true)
- else
-  showTab("library");setCompact(false)
- end
+ if f:IsShown() then f:Hide()
+ elseif compact:IsShown() then compact:Hide()
+ elseif db and db.compactMode then setCompact(true)
+ else showTab("library");setCompact(false) end
 end
 button(f,"Compact",500,-575,92,function() setCompact(true) end)
 local expandButton=iconButton(179,-4,"Interface/Buttons/UI-PlusButton-UP","Open full player",function() showTab("library");setCompact(false) end)
@@ -340,12 +375,36 @@ widthSlider:SetScript("OnValueChanged",function(self,value)
  applyCompactWidth(width)
 end)
 font(settings,"GameFontDisableSmall",24,-363,550):SetText("180-360 px. Default: 210 px. Width updates immediately and is saved.")
-font(settings,"GameFontNormal",20,-389,555):SetText("Commands / compact shortcuts")
-local help=font(settings,"GameFontHighlightSmall",24,-409,555)
-help:SetText("/mmp - Toggle view; closing full during playback returns to compact\n/mmp full  |  compact  |  play  |  stop  |  next  |  prev\nCompact title / background: left-drag to move; right-click for quick controls.\nMinimap: click to open full Library view; drag to reposition.")
-help:SetSpacing(2)
+local fullOpacityLabel=font(settings,"GameFontHighlightSmall",24,-390,240)
+local fullOpacitySlider=CreateFrame("Slider",nil,settings,"OptionsSliderTemplate")
+fullOpacitySlider:SetPoint("TOPLEFT",280,-388);fullOpacitySlider:SetSize(270,16)
+fullOpacitySlider:SetMinMaxValues(33,100);fullOpacitySlider:SetValueStep(1)
+if fullOpacitySlider.SetObeyStepOnDrag then fullOpacitySlider:SetObeyStepOnDrag(true) end
+fullOpacitySlider:SetScript("OnValueChanged",function(self,value)
+ local alpha=opacity(math.floor(value+0.5)/100,0.33,1)
+ fullOpacityLabel:SetText("Full player opacity: "..math.floor(alpha*100+0.5).."%")
+ if db and not opacityInitializing then db.fullPlayerOpacity=alpha end
+ f:SetAlpha(alpha)
+end)
+local resizeNote=font(settings,"GameFontDisableSmall",24,-415,550)
+resizeNote:SetText("This window is a fixed size. Everything already fits, and frankly, I didn't feel like making it resizable. - Mali")
+resizeNote:SetSpacing(2)
+local help=button(settings,"Commands / shortcuts",24,-447,190,function() end)
+local function showHelp(self)
+ GameTooltip:SetOwner(self,"ANCHOR_RIGHT");GameTooltip:SetText("Commands / compact shortcuts")
+ GameTooltip:AddLine("/mmp - Show / hide; closing full during playback returns to compact",1,1,1,true)
+ GameTooltip:AddLine("/mmp full  |  compact  |  play  |  stop  |  next  |  prev",1,1,1,true)
+ GameTooltip:AddLine("Compact: left-drag title / background to move; right-click for controls.",1,1,1,true)
+ GameTooltip:AddLine("Minimap: click for full Library; drag to reposition.",1,1,1,true)
+ GameTooltip:AddLine("Volume: 0.1%-100%; use Stop for silence. No automatic restart on volume changes.",1,1,1,true)
+ GameTooltip:AddLine("/mmpdiag on | off | status - Audio diagnostics",1,1,1,true);GameTooltip:Show()
+end
+help:SetScript("OnClick",showHelp);help:SetScript("OnEnter",showHelp)
+help:SetScript("OnLeave",function() GameTooltip:Hide() end)
+help:SetScript("OnHide",function() GameTooltip:Hide() end)
+font(settings,"GameFontDisableSmall",232,-453,330):SetText("Full player opacity: 33-100%; compact is separate.")
 font(settings,"GameFontNormal",20,-475,555):SetText("About")
-font(settings,"GameFontHighlightSmall",24,-494,555):SetText("MaliMusicPlayer v0.7.8 Experimental - By Mali Gnosis, for Mali Gnosis.")
+font(settings,"GameFontHighlightSmall",24,-494,555):SetText("MaliMusicPlayer v0.7.9.3 - By Mali Gnosis, for Mali Gnosis.")
 local quote=font(settings,"GameFontHighlightSmall",24,-513,555)
 quote:SetWordWrap(false)
 quote:SetText('"If I throw a dog a bone, I don\'t want to know if it tastes good or not." - Brick Top')
@@ -373,8 +432,7 @@ local function toggleMenu()
  menuShuffle:SetText(db and db.shuffle and "Shuffle: On" or "Shuffle: Off")
  menuRepeat:SetText(db and db.repeatTrack and "Repeat: On" or "Repeat: Off")
  local x,y=GetCursorPosition();local scale=UIParent:GetEffectiveScale()
- menu:ClearAllPoints();menu:SetPoint("BOTTOMLEFT",UIParent,"BOTTOMLEFT",x/scale+8,y/scale+8);menu:Show()
- GameTooltip:Hide()
+ menu:ClearAllPoints();menu:SetPoint("BOTTOMLEFT",UIParent,"BOTTOMLEFT",x/scale+8,y/scale+8);menu:Show();GameTooltip:Hide()
 end
 local away=0
 menu:SetScript("OnShow",function() away=0 end)
@@ -392,15 +450,13 @@ local function compactMouseUp(self,which)
  elseif which=="RightButton" and not compactMoving then toggleMenu() end
 end
 for _,surface in ipairs({compact,titleViewport}) do
- surface:SetScript("OnMouseDown",compactMouseDown)
- surface:SetScript("OnMouseUp",compactMouseUp)
+ surface:SetScript("OnMouseDown",compactMouseDown);surface:SetScript("OnMouseUp",compactMouseUp)
 end
 compact:HookScript("OnHide",function() finishCompactMove();menu:Hide();GameTooltip:Hide() end)
 local minimapButton
 local function createMinimapButton()
  if minimapButton or not Minimap then return end
- local b=CreateFrame("Button","MaliMusicPlayerMinimapButton",Minimap)
- minimapButton=b
+ local b=CreateFrame("Button","MaliMusicPlayerMinimapButton",Minimap);minimapButton=b
  b:SetSize(32,32);b:SetFrameStrata("MEDIUM");b:SetFrameLevel(Minimap:GetFrameLevel()+10)
  b:EnableMouse(true);b:RegisterForClicks("LeftButtonUp","RightButtonUp");b:RegisterForDrag("LeftButton")
  local icon=b:CreateTexture(nil,"ARTWORK")
@@ -412,16 +468,13 @@ local function createMinimapButton()
  local angle=tonumber(db and db.minimapAngle) or 225
  local dragging,wasDragged=false,false
  local function position()
-  local a=math.rad(angle)
-  local rx=Minimap:GetWidth()/2+8
-  local ry=Minimap:GetHeight()/2+8
+  local a=math.rad(angle);local rx=Minimap:GetWidth()/2+8;local ry=Minimap:GetHeight()/2+8
   b:ClearAllPoints();b:SetPoint("CENTER",Minimap,"CENTER",math.cos(a)*rx,math.sin(a)*ry)
  end
  local function cursorAngle()
   local x,y=GetCursorPosition();local scale=Minimap:GetEffectiveScale()
   local cx,cy=Minimap:GetCenter();if not cx or not cy then return end
-  local dx,dy=x/scale-cx,y/scale-cy
-  if dx==0 and dy==0 then return end
+  local dx,dy=x/scale-cx,y/scale-cy;if dx==0 and dy==0 then return end
   local a
   if dx==0 then a=dy>0 and math.pi/2 or -math.pi/2
   else a=math.atan(dy/dx);if dx<0 then a=a+math.pi end end
@@ -448,13 +501,11 @@ local function createMinimapButton()
   if current then GameTooltip:AddLine((playing and "Playing: " or "Stopped: ")..safe(label(tracks[current])),1,1,1,true) end
   GameTooltip:AddLine("Left-click: open full Library view",0.75,0.85,1)
   GameTooltip:AddLine("Right-click: open full Library view",0.75,0.85,1)
-  GameTooltip:AddLine("Left-drag: move around minimap",0.75,0.85,1)
-  GameTooltip:Show()
+  GameTooltip:AddLine("Left-drag: move around minimap",0.75,0.85,1);GameTooltip:Show()
  end)
  b:SetScript("OnLeave",function() GameTooltip:Hide() end)
  b:SetScript("OnHide",function() finishDrag();GameTooltip:Hide() end)
- Minimap:HookScript("OnSizeChanged",position)
- position();b:Show()
+ Minimap:HookScript("OnSizeChanged",position);position();b:Show()
 end
 local function openPlayerSettings()
  if SettingsPanel and SettingsPanel:IsShown() then SettingsPanel:Hide() end
@@ -484,35 +535,40 @@ events:SetScript("OnEvent",function(self,event,name)
   db.compactBackground=opacity(db.compactBackground,0,0.35)
   db.compactTextOpacity=opacity(db.compactTextOpacity,0.2,0.95)
   db.compactButtonOpacity=opacity(db.compactButtonOpacity,0.2,1)
-  -- Keep the 0.7.7 migration marker so upgrading does not reset later choices.
-  if not db.compactDefaults077 then
-   db.compactScrollMode="loop";db.compactDefaults077=true
-  elseif db.compactScrollMode~="loop" and db.compactScrollMode~="bounce" then
-   db.compactScrollMode="loop"
-  end
-  db.compactWidth=compactWidth(db.compactWidth)
-  syncScrollMode()
+  db.fullPlayerOpacity=opacity(db.fullPlayerOpacity,0.33,1)
+  if not db.compactDefaults077 then db.compactScrollMode="loop";db.compactDefaults077=true
+  elseif db.compactScrollMode~="loop" and db.compactScrollMode~="bounce" then db.compactScrollMode="loop" end
+  db.compactWidth=compactWidth(db.compactWidth);syncScrollMode()
   restorePosition(f,"position");restorePosition(compact,"compactPosition")
-  applyCompactWidth(db.compactWidth)
-  sync();rebuild();syncVolume();opacityInitializing=true
+  applyCompactWidth(db.compactWidth);sync();rebuild();syncVolume();opacityInitializing=true
   backgroundSlider:SetValue(db.compactBackground*100);textSlider:SetValue(db.compactTextOpacity*100);buttonSlider:SetValue(db.compactButtonOpacity*100)
-  widthSlider:SetValue(db.compactWidth)
-  widthLabel:SetText("Compact width: "..db.compactWidth.." px")
-  opacityInitializing=false;applyOpacity()
+  widthSlider:SetValue(db.compactWidth);widthLabel:SetText("Compact width: "..db.compactWidth.." px")
+  fullOpacitySlider:SetValue(db.fullPlayerOpacity*100)
+  fullOpacityLabel:SetText("Full player opacity: "..math.floor(db.fullPlayerOpacity*100+0.5).."%")
+  f:SetAlpha(db.fullPlayerOpacity);opacityInitializing=false;applyOpacity()
   local unknown=0;for _,t in ipairs(tracks) do if (t.duration or 0)<=0 then unknown=unknown+1 end end
-  say("v0.7.8 Experimental: "..#tracks.." tracks; "..unknown.." unknown durations. /mmp to open.")
+  say("v0.7.9.3: "..#tracks.." tracks; "..unknown.." unknown durations. /mmp to open.")
  elseif event=="PLAYER_LOGIN" then registerOptionsPanel();createMinimapButton()
  elseif event=="LOADING_SCREEN_ENABLED" then loading=true
  elseif event=="LOADING_SCREEN_DISABLED" then
   loading=false
-  if playing then updateTime();C_Timer.After(1,function() if playing and not loading then PlayMusic("Interface/AddOns/MaliMusicPlayer/Silence.ogg") end end) end
- elseif event=="CVAR_UPDATE" and f:IsShown() then syncVolume()
- elseif event=="PLAYER_LOGOUT" then stopHandle();playing=false;StopMusic() end
+  if playing then
+   updateTime()
+   C_Timer.After(1,function() if playing and not loading then PlayMusic("Interface/AddOns/MaliMusicPlayer/Silence.ogg") end end)
+  end
+ elseif event=="CVAR_UPDATE" then
+  if f:IsShown() then syncVolume() end
+ elseif event=="PLAYER_LOGOUT" then playing=false;stopHandle();StopMusic() end
 end)
 local tick=0
 events:SetScript("OnUpdate",function(self,elapsed)
  if not playing or loading then return end
  tick=tick+elapsed;if tick<0.2 then return end;tick=0
+ -- An external mute is not silently undone. Stop tracking playback; Play is explicit recovery.
+ if musicVolume()<=0 then
+  stop();timing:SetText("Music muted outside this player. Raise volume, then press Play.")
+  compactTime:SetText("Muted externally");trace("External zero detected; stopped without automatic recovery.");return
+ end
  updateTime();local duration=tracks[current].duration or 0
  if duration>0 and GetTime()-started>=duration+0.4 then advance(1,true) end
 end)
@@ -529,4 +585,12 @@ SlashCmdList.MALIMUSICPLAYER=function(msg)
  elseif msg=="prev" then advance(-1,false)
  elseif msg=="play" then play(selected)
  else togglePlayer() end
+end
+SLASH_MALIMUSICPLAYERDIAG1="/mmpdiag"
+SlashCmdList.MALIMUSICPLAYERDIAG=function(msg)
+ msg=string.lower(strtrim(msg or ""))
+ if msg=="on" then diagnostics=true;say("Audio diagnostics enabled for this session.")
+ elseif msg=="off" then diagnostics=false;say("Audio diagnostics disabled.")
+ elseif msg~="status" and msg~="" then say("/mmpdiag on | off | status");return end
+ say("[audio] volume="..musicVolume().." playing="..tostring(playing).." handle="..tostring(soundHandle).." track="..tostring(current).." allSound="..tostring(GetCVar("Sound_EnableAllSound")).." musicEnabled="..tostring(GetCVar("Sound_EnableMusic")))
 end
