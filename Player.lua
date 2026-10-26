@@ -1,4 +1,4 @@
--- MaliMusicPlayer 0.7.9.3
+-- MaliMusicPlayer 0.7.9.6
 local tracks=MaliMusicPlayerLibrary or {}
 local db,current,selected,started=nil,nil,1,0
 local playing,loading,soundHandle=false,false,nil
@@ -15,9 +15,7 @@ local function musicVolume() return math.max(0,math.min(1,tonumber(GetCVar("Soun
 local function sliderPercent(value)
  return math.max(MIN_VOLUME_PERCENT,math.min(100,math.floor((tonumber(value) or MIN_VOLUME_PERCENT)*10+0.5)/10))
 end
-local function percentText(value)
- return (string.format("%.1f",value):gsub("%.0$",""))
-end
+local function percentText(value) return (string.format("%.1f",value):gsub("%.0$","")) end
 local function clock(n)
  n=math.max(0,math.floor(n or 0))
  if n>=3600 then return string.format("%d:%02d:%02d",math.floor(n/3600),math.floor(n/60)%60,n%60) end
@@ -48,7 +46,7 @@ f:SetSize(610,610);f:SetPoint("CENTER");f:SetMovable(true);f:EnableMouse(true)
 f:SetClampedToScreen(true);f:RegisterForDrag("LeftButton")
 f:SetScript("OnDragStart",f.StartMoving)
 f:SetScript("OnDragStop",function(self) savePosition(self,"position") end)
-f.TitleText:SetText("MaliMusicPlayer 0.7.9.3")
+f.TitleText:SetText("MaliMusicPlayer 0.7.9.6")
 f:Hide();table.insert(UISpecialFrames,"MaliMusicPlayerFrame")
 local now=font(f,"GameFontHighlight",16,-38,575)
 local timing=font(f,"GameFontNormalSmall",16,-64,575);timing:SetText("Stopped")
@@ -164,11 +162,11 @@ local function applyOpacity()
  local hovered=false
  for _,b in ipairs(compactButtons) do
   if b.hovered then hovered=true end
-  b:SetAlpha(b.hovered and 1 or opacity(db and db.compactButtonOpacity,0.2,1))
+  b:SetAlpha(b.hovered and 1 or opacity(db and db.compactButtonOpacity,0.2,0.30))
  end
- local textAlpha=hovered and 1 or opacity(db and db.compactTextOpacity,0.2,0.95)
+ local textAlpha=hovered and 1 or opacity(db and db.compactTextOpacity,0.2,0.30)
  title:SetAlpha(textAlpha);titleRepeat:SetAlpha(textAlpha);compactTime:SetAlpha(textAlpha)
- compactBG:SetColorTexture(0.025,0.025,0.025,opacity(db and db.compactBackground,0,0.35))
+ compactBG:SetColorTexture(0.025,0.025,0.025,opacity(db and db.compactBackground,0,0.30))
 end
 local function hoverHandlers(b,tooltip)
  b:SetScript("OnEnter",function(self)
@@ -196,10 +194,10 @@ local function updateTime()
  if not current then return end
  local duration=tracks[current].duration or 0;local elapsed=math.max(0,GetTime()-started)
  if duration>0 then
-  timing:SetText("Elapsed "..clock(elapsed).."   |   Remaining -"..clock(duration-elapsed).."   |   Total "..clock(duration))
+  timing:SetText("Elapsed "..clock(elapsed).."   |   Remaining -"..clock(duration-elapsed).."   |   Total "..clock(duration))
   compactTime:SetText(clock(elapsed).." / "..clock(duration));progress:SetValue(math.min(1,elapsed/duration))
  else
-  timing:SetText("Elapsed "..clock(elapsed).."   |   Duration unknown: regenerate library or use Next")
+  timing:SetText("Elapsed "..clock(elapsed).."   |   Duration unknown: regenerate library or use Next")
   compactTime:SetText(clock(elapsed).." / --:--");progress:SetValue(0)
  end
 end
@@ -381,30 +379,14 @@ fullOpacitySlider:SetPoint("TOPLEFT",280,-388);fullOpacitySlider:SetSize(270,16)
 fullOpacitySlider:SetMinMaxValues(33,100);fullOpacitySlider:SetValueStep(1)
 if fullOpacitySlider.SetObeyStepOnDrag then fullOpacitySlider:SetObeyStepOnDrag(true) end
 fullOpacitySlider:SetScript("OnValueChanged",function(self,value)
- local alpha=opacity(math.floor(value+0.5)/100,0.33,1)
+ local alpha=opacity(math.floor(value+0.5)/100,0.33,0.70)
  fullOpacityLabel:SetText("Full player opacity: "..math.floor(alpha*100+0.5).."%")
  if db and not opacityInitializing then db.fullPlayerOpacity=alpha end
  f:SetAlpha(alpha)
 end)
-local resizeNote=font(settings,"GameFontDisableSmall",24,-415,550)
-resizeNote:SetText("This window is a fixed size. Everything already fits, and frankly, I didn't feel like making it resizable. - Mali")
-resizeNote:SetSpacing(2)
-local help=button(settings,"Commands / shortcuts",24,-447,190,function() end)
-local function showHelp(self)
- GameTooltip:SetOwner(self,"ANCHOR_RIGHT");GameTooltip:SetText("Commands / compact shortcuts")
- GameTooltip:AddLine("/mmp - Show / hide; closing full during playback returns to compact",1,1,1,true)
- GameTooltip:AddLine("/mmp full  |  compact  |  play  |  stop  |  next  |  prev",1,1,1,true)
- GameTooltip:AddLine("Compact: left-drag title / background to move; right-click for controls.",1,1,1,true)
- GameTooltip:AddLine("Minimap: click for full Library; drag to reposition.",1,1,1,true)
- GameTooltip:AddLine("Volume: 0.1%-100%; use Stop for silence. No automatic restart on volume changes.",1,1,1,true)
- GameTooltip:AddLine("/mmpdiag on | off | status - Audio diagnostics",1,1,1,true);GameTooltip:Show()
-end
-help:SetScript("OnClick",showHelp);help:SetScript("OnEnter",showHelp)
-help:SetScript("OnLeave",function() GameTooltip:Hide() end)
-help:SetScript("OnHide",function() GameTooltip:Hide() end)
 font(settings,"GameFontDisableSmall",232,-453,330):SetText("Full player opacity: 33-100%; compact is separate.")
 font(settings,"GameFontNormal",20,-475,555):SetText("About")
-font(settings,"GameFontHighlightSmall",24,-494,555):SetText("MaliMusicPlayer v0.7.9.3 - By Mali Gnosis, for Mali Gnosis.")
+font(settings,"GameFontHighlightSmall",24,-494,555):SetText("MaliMusicPlayer v0.7.9.6 - By Mali Gnosis, for Mali Gnosis.")
 local quote=font(settings,"GameFontHighlightSmall",24,-513,555)
 quote:SetWordWrap(false)
 quote:SetText('"If I throw a dog a bone, I don\'t want to know if it tastes good or not." - Brick Top')
@@ -532,10 +514,10 @@ for _,event in ipairs({"ADDON_LOADED","PLAYER_LOGIN","LOADING_SCREEN_ENABLED","L
 events:SetScript("OnEvent",function(self,event,name)
  if event=="ADDON_LOADED" and name=="MaliMusicPlayer" then
   MaliMusicPlayerDB=MaliMusicPlayerDB or {};db=MaliMusicPlayerDB
-  db.compactBackground=opacity(db.compactBackground,0,0.35)
-  db.compactTextOpacity=opacity(db.compactTextOpacity,0.2,0.95)
-  db.compactButtonOpacity=opacity(db.compactButtonOpacity,0.2,1)
-  db.fullPlayerOpacity=opacity(db.fullPlayerOpacity,0.33,1)
+  db.compactBackground=opacity(db.compactBackground,0,0.30)
+  db.compactTextOpacity=opacity(db.compactTextOpacity,0.2,0.30)
+  db.compactButtonOpacity=opacity(db.compactButtonOpacity,0.2,0.30)
+  db.fullPlayerOpacity=opacity(db.fullPlayerOpacity,0.33,0.70)
   if not db.compactDefaults077 then db.compactScrollMode="loop";db.compactDefaults077=true
   elseif db.compactScrollMode~="loop" and db.compactScrollMode~="bounce" then db.compactScrollMode="loop" end
   db.compactWidth=compactWidth(db.compactWidth);syncScrollMode()
@@ -547,7 +529,7 @@ events:SetScript("OnEvent",function(self,event,name)
   fullOpacityLabel:SetText("Full player opacity: "..math.floor(db.fullPlayerOpacity*100+0.5).."%")
   f:SetAlpha(db.fullPlayerOpacity);opacityInitializing=false;applyOpacity()
   local unknown=0;for _,t in ipairs(tracks) do if (t.duration or 0)<=0 then unknown=unknown+1 end end
-  say("v0.7.9.3: "..#tracks.." tracks; "..unknown.." unknown durations. /mmp to open.")
+  say("v0.7.9.6: "..#tracks.." tracks; "..unknown.." unknown durations. /mmp to open.")
  elseif event=="PLAYER_LOGIN" then registerOptionsPanel();createMinimapButton()
  elseif event=="LOADING_SCREEN_ENABLED" then loading=true
  elseif event=="LOADING_SCREEN_DISABLED" then
