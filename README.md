@@ -96,7 +96,6 @@ There is no need to upload your personal music collection with a report.
 ZiRRuSH  
 Mali Gnosis  
 Malignosis
-Infernia
 
 ## License
 
