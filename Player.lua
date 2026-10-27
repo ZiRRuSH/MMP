@@ -1,4 +1,4 @@
--- MaliMusicPlayer 0.8.0
+-- MaliMusicPlayer 0.8.2
 local tracks=MaliMusicPlayerLibrary or {}
 local db,current,selected,started=nil,nil,1,0
 local playing,loading,soundHandle=false,false,nil
@@ -46,7 +46,7 @@ f:SetSize(610,610);f:SetPoint("CENTER");f:SetMovable(true);f:EnableMouse(true)
 f:SetClampedToScreen(true);f:RegisterForDrag("LeftButton")
 f:SetScript("OnDragStart",f.StartMoving)
 f:SetScript("OnDragStop",function(self) savePosition(self,"position") end)
-f.TitleText:SetText("MaliMusicPlayer 0.8.0")
+f.TitleText:SetText("MaliMusicPlayer 0.8.2")
 f:Hide();table.insert(UISpecialFrames,"MaliMusicPlayerFrame")
 local now=font(f,"GameFontHighlight",16,-38,575)
 local timing=font(f,"GameFontNormalSmall",16,-64,575);timing:SetText("Stopped")
@@ -230,10 +230,12 @@ local function stop()
 end
 play=function(index)
  if not tracks[index] then say("No tracks. Run UpdateLibrary.cmd, then restart WoW.");return end
- if GetCVar("Sound_EnableAllSound")=="0" or GetCVar("Sound_EnableMusic")=="0" then
-  say("Enable sound and Music in WoW's audio settings.");return
+ if GetCVar("Sound_EnableAllSound")=="0" then
+  say("Enable sound in WoW's audio settings.");return
  end
- -- Do not silently alter an external mute or start a sound on a zero-volume channel.
+ if GetCVar("Sound_EnableMusic")=="0" then
+  say("Music is disabled. Click Music: Off beside the volume slider to enable it, then press Play.");return
+ end
  if musicVolume()<=0 then
   say("Music volume is 0% outside this player. Raise the slider, then press Play.");return
  end
@@ -267,12 +269,11 @@ sync=function()
 end
 local volumeLabel=font(f,"GameFontNormalSmall",18,-578,160)
 local volume=CreateFrame("Slider",nil,f,"OptionsSliderTemplate")
-volume:SetPoint("TOPLEFT",180,-576);volume:SetSize(310,16)
+volume:SetPoint("TOPLEFT",180,-576);volume:SetSize(210,16)
 volume:SetMinMaxValues(MIN_VOLUME_PERCENT,100);volume:SetValueStep(0.1)
 if volume.SetObeyStepOnDrag then volume:SetObeyStepOnDrag(true) end
 local updatingVolume=false
 local function syncVolume()
- -- Programmatic synchronization must never write a rounded value back to the CVar.
  updatingVolume=true
  local actual=musicVolume()*100
  volume:SetValue(sliderPercent(actual))
@@ -288,7 +289,6 @@ end
 volume:SetScript("OnValueChanged",function(self,value)
  if updatingVolume then return end
  local percent=sliderPercent(value)
- -- 0.1 percent / 100 is a 0.001 CVar value, not 0.1 (which would be 10 percent).
  SetCVar("Sound_MusicVolume",percent/100)
  trace("Slider: "..percentText(percent).."%; CVar="..musicVolume())
  syncVolume()
@@ -300,7 +300,27 @@ volume:SetScript("OnEnter",function(self)
 end)
 volume:SetScript("OnLeave",function() GameTooltip:Hide() end)
 volume:SetScript("OnHide",function() GameTooltip:Hide() end)
-f:SetScript("OnShow",syncVolume)
+local musicToggle
+local function syncMusicToggle()
+ if musicToggle then
+  musicToggle:SetText(GetCVar("Sound_EnableMusic")=="1" and "Music: On" or "Music: Off")
+ end
+end
+musicToggle=button(f,"Music: Off",400,-575,94,function()
+ local enabled=GetCVar("Sound_EnableMusic")=="1"
+ SetCVar("Sound_EnableMusic",enabled and "0" or "1")
+ syncMusicToggle()
+end)
+musicToggle:SetScript("OnEnter",function(self)
+ GameTooltip:SetOwner(self,"ANCHOR_TOP");GameTooltip:SetText("Enable / disable music")
+ GameTooltip:AddLine("Changes WoW's Music setting directly. No keyboard shortcut required.",1,1,1,true)
+ GameTooltip:AddLine("Enable music here, then press Play to listen to your tracks.",1,1,1,true)
+ GameTooltip:AddLine("Does not change your volume or start / restart a track.",1,1,1,true)
+ GameTooltip:Show()
+end)
+musicToggle:SetScript("OnLeave",function() GameTooltip:Hide() end)
+musicToggle:SetScript("OnHide",function() GameTooltip:Hide() end)
+f:SetScript("OnShow",function() syncVolume();syncMusicToggle() end)
 setCompact=function(enabled)
  if db then db.compactMode=enabled end
  if enabled then f:Hide();applyOpacity();compact:Show() else compact:Hide();f:Show() end
@@ -384,15 +404,15 @@ fullOpacitySlider:SetScript("OnValueChanged",function(self,value)
  if db and not opacityInitializing then db.fullPlayerOpacity=alpha end
  f:SetAlpha(alpha)
 end)
-font(settings,"GameFontDisableSmall",232,-453,330):SetText("Full player opacity: 33-100%; compact is separate.")
-font(settings,"GameFontNormal",20,-475,555):SetText("About")
-font(settings,"GameFontHighlightSmall",24,-494,555):SetText("MaliMusicPlayer v0.8.0 - By Mali Gnosis, for Mali Gnosis.")
-local quote=font(settings,"GameFontHighlightSmall",24,-513,555)
+font(settings,"GameFontDisableSmall",232,-414,330):SetText("Full player opacity: 33-100%; compact is separate.")
+font(settings,"GameFontNormal",20,-435,555):SetText("About")
+font(settings,"GameFontHighlightSmall",24,-454,555):SetText("MaliMusicPlayer v0.8.2 - By Mali Gnosis, for Mali Gnosis.")
+local quote=font(settings,"GameFontHighlightSmall",24,-473,555)
 quote:SetWordWrap(false)
 quote:SetText('"If I throw a dog a bone, I don\'t want to know if it tastes good or not." - Brick Top')
 local quoteFont=quote:GetFont()
 for size=11,8,-0.5 do quote:SetFont(quoteFont,size,"");if quote:GetStringWidth()<=555 then break end end
-font(settings,"GameFontDisableSmall",24,-550,555):SetText("Released under the MIT License. See LICENSE.MD for details.")
+font(settings,"GameFontDisableSmall",24,-510,555):SetText("Released under the MIT License. See LICENSE.MD for details.")
 showTab("library")
 local menu=CreateFrame("Frame","MaliMusicPlayerQuickControls",compact)
 menu:SetSize(244,256);menu:SetFrameStrata("DIALOG");menu:SetClampedToScreen(true);menu:EnableMouse(true);menu:Hide()
@@ -436,8 +456,6 @@ for _,surface in ipairs({compact,titleViewport}) do
 end
 compact:HookScript("OnHide",function() finishCompactMove();menu:Hide();GameTooltip:Hide() end)
 
--- Optional integration: reuse libraries supplied by another installed addon.
--- No bundled libraries or required dependencies; custom fallback remains available.
 local minimapButton
 local minimapBroker
 local minimapRetryFrame
@@ -469,7 +487,7 @@ local function createStandardMinimapButton()
      tooltip:AddLine((playing and "Playing: " or "Stopped: ")..safe(label(tracks[current])),1,1,1,true)
     end
     tooltip:AddLine("Left/right-click: open full Library view",0.75,0.85,1)
-    tooltip:AddLine("Left-drag: move around minimap",0.75,0.85,1)
+    tooltip:AddLine("Drag to reposition",0.75,0.85,1)
    end,
   })
  end
@@ -484,7 +502,7 @@ local function createStandardMinimapButton()
  end
  minimapButton=standard
  if minimapRetryFrame then minimapRetryFrame:UnregisterAllEvents() end
- say("0.8.0 minimap: LibDBIcon active; Warlock launcher registered.")
+ trace("0.8.2 minimap: LibDBIcon active; Warlock launcher registered.")
  return true
 end
 local function createFallbackMinimapButton()
@@ -539,13 +557,13 @@ local function createFallbackMinimapButton()
    GameTooltip:AddLine((playing and "Playing: " or "Stopped: ")..safe(label(tracks[current])),1,1,1,true)
   end
   GameTooltip:AddLine("Left/right-click: open full Library view",0.75,0.85,1)
-  GameTooltip:AddLine("Left-drag: move around minimap",0.75,0.85,1);GameTooltip:Show()
+  GameTooltip:AddLine("Drag to reposition",0.75,0.85,1);GameTooltip:Show()
  end)
  b:SetScript("OnLeave",function() GameTooltip:Hide() end)
  b:SetScript("OnHide",function() finishDrag();GameTooltip:Hide() end)
  Minimap:HookScript("OnSizeChanged",position);position()
  if not (db and type(db.minimap)=="table" and db.minimap.hide) then b:Show() else b:Hide() end
- say("0.8.0 minimap: custom fallback; LibDBIcon/LibDataBroker not loaded. Warning may remain.")
+ say("0.8.2 minimap: custom fallback; LibDBIcon/LibDataBroker not loaded. Warning may remain.")
 end
 local function createMinimapButton()
  if minimapButton or minimapRetryFrame then return end
@@ -554,7 +572,6 @@ local function createMinimapButton()
  minimapRetryFrame:SetScript("OnEvent",function()
   C_Timer.After(0,function() createStandardMinimapButton() end)
  end)
- -- Run after all PLAYER_LOGIN handlers, so other addons can initialize first.
  C_Timer.After(0,function()
   if not createStandardMinimapButton() then createFallbackMinimapButton() end
  end)
@@ -593,14 +610,14 @@ events:SetScript("OnEvent",function(self,event,name)
   elseif db.compactScrollMode~="loop" and db.compactScrollMode~="bounce" then db.compactScrollMode="loop" end
   db.compactWidth=compactWidth(db.compactWidth);syncScrollMode()
   restorePosition(f,"position");restorePosition(compact,"compactPosition")
-  applyCompactWidth(db.compactWidth);sync();rebuild();syncVolume();opacityInitializing=true
+  applyCompactWidth(db.compactWidth);sync();rebuild();syncVolume();syncMusicToggle();opacityInitializing=true
   backgroundSlider:SetValue(db.compactBackground*100);textSlider:SetValue(db.compactTextOpacity*100);buttonSlider:SetValue(db.compactButtonOpacity*100)
   widthSlider:SetValue(db.compactWidth);widthLabel:SetText("Compact width: "..db.compactWidth.." px")
   fullOpacitySlider:SetValue(db.fullPlayerOpacity*100)
   fullOpacityLabel:SetText("Full player opacity: "..math.floor(db.fullPlayerOpacity*100+0.5).."%")
   f:SetAlpha(db.fullPlayerOpacity);opacityInitializing=false;applyOpacity()
   local unknown=0;for _,t in ipairs(tracks) do if (t.duration or 0)<=0 then unknown=unknown+1 end end
-  say("v0.8.0: "..#tracks.." tracks; "..unknown.." unknown durations. /mmp to open.")
+  say("v0.8.2: "..#tracks.." tracks; "..unknown.." unknown durations. /mmp to open.")
  elseif event=="PLAYER_LOGIN" then registerOptionsPanel();createMinimapButton()
  elseif event=="LOADING_SCREEN_ENABLED" then loading=true
  elseif event=="LOADING_SCREEN_DISABLED" then
@@ -610,6 +627,7 @@ events:SetScript("OnEvent",function(self,event,name)
    C_Timer.After(1,function() if playing and not loading then PlayMusic("Interface/AddOns/MaliMusicPlayer/Silence.ogg") end end)
   end
  elseif event=="CVAR_UPDATE" then
+  syncMusicToggle()
   if f:IsShown() then syncVolume() end
  elseif event=="PLAYER_LOGOUT" then playing=false;stopHandle();StopMusic() end
 end)
@@ -617,7 +635,6 @@ local tick=0
 events:SetScript("OnUpdate",function(self,elapsed)
  if not playing or loading then return end
  tick=tick+elapsed;if tick<0.2 then return end;tick=0
- -- An external mute is not silently undone. Stop tracking playback; Play is explicit recovery.
  if musicVolume()<=0 then
   stop();timing:SetText("Music muted outside this player. Raise volume, then press Play.")
   compactTime:SetText("Muted externally");trace("External zero detected; stopped without automatic recovery.");return
