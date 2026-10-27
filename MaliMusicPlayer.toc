@@ -2,7 +2,7 @@
 ## Title: MaliMusicPlayer
 ## Notes: Local MP3 player with full and compact views
 ## Author: Mali Gnosis
-## Version: 0.8.2
+## Version: 0.8.3
 ## SavedVariables: MaliMusicPlayerDB
 ## Category: Music
 ## IconTexture: Interface\Icons\ClassIcon_Warlock
