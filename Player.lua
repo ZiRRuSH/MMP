@@ -1149,15 +1149,22 @@ helpNote:SetText(
         .. "run |cff70cfffUpdateLibrary.cmd|r again, then type |cff70cfff/reload|r."
 )
 
-local helpRestart = font(help, "GameFontHighlight", 24, -184, 550)
-helpRestart:ClearAllPoints()
-helpRestart:SetPoint("TOPLEFT", helpNote, "BOTTOMLEFT", 0, -16)
-helpRestart:SetFont(helpFont, 13, "")
-helpRestart:SetSpacing(4)
-helpRestart:SetWordWrap(true)
-helpRestart:SetText(
-    "|cffffd100New track will not play?|r\n"
-        .. "If it appears in the library but will not play, fully exit and restart WoW."
+local helpPause = font(help, "GameFontHighlight", 24, -184, 550)
+helpPause:ClearAllPoints()
+helpPause:SetPoint("TOPLEFT", helpNote, "BOTTOMLEFT", 0, -24)
+helpPause:SetFont(helpFont, 13, "")
+helpPause:SetSpacing(4)
+helpPause:SetWordWrap(true)
+helpPause:SetText(
+    "|cffffd100Why no Pause / Resume?|r\n"
+        .. "MaliMusicPlayer acts as a replacement soundtrack for WoW, "
+        .. "suppressing the normal background music and playing your MP3s "
+        .. "through the game's Music audio channel.\n\n"
+        .. "WoW's addon audio controls let us start and stop tracks, "
+        .. "but not pause them or resume from a saved position. "
+        .. "Stop ends playback; Play starts the track again from the beginning. "
+        .. "This is a limitation of the controls WoW provides to addons, "
+        .. "not a missing player feature."
 )
 
 -- Compact Quick Controls
