@@ -4,6 +4,14 @@ Your music. Your adventures. Your soundtrack.
 
 MaliMusicPlayer is a World of Warcraft add-on for playing your own music while you play. Drop your MP3s into the included music folder, run the library updater, and head into Azeroth with your own soundtrack.
 
+<p align="center">
+  <img src="images/settings.png" alt="MaliMusicPlayer screenshot">
+</p>
+
+<p align="center">
+  <img src="images/compact.png" alt="MaliMusicPlayer screenshot">
+</p>
+
 ## Getting started
 
 ### 1. Install the add-on
