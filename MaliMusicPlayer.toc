@@ -1,10 +1,11 @@
-## Interface: 20506, 16001, 120100, 120105
+## Interface: 16001, 120100, 120105, 20506
 ## Title: MaliMusicPlayer
-## Notes: Local MP3 player with full and compact views
+## Notes: Play your own music and browse in-game music.
 ## Author: Mali Gnosis
-## Version: 0.8.9
+## Version: 0.9a
 ## SavedVariables: MaliMusicPlayerDB
-## Category: Music
-## IconTexture: Interface\Icons\ClassIcon_Warlock
+## OptionalDeps: LibStub, LibDataBroker-1.1, LibDBIcon-1.0
+
 Library.lua
+GameMusic.lua
 Player.lua

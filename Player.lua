@@ -1,8 +1,34 @@
--- MaliMusicPlayer 0.8.9
+-- MaliMusicPlayer 0.9a
 
 -- State
 
-local tracks = MaliMusicPlayerLibrary or {}
+local tracks = {}
+for _, track in ipairs(MaliMusicPlayerLibrary or {}) do
+    tracks[#tracks + 1] = track
+end
+local mp3Count = #tracks
+local _, clientBuild = GetBuildInfo()
+local gameCatalog = MaliMusicPlayerGameMusic
+if gameCatalog and tostring(clientBuild) == gameCatalog.build then
+    for _, track in ipairs(gameCatalog.tracks) do
+        tracks[#tracks + 1] = track
+    end
+end
+local browseGame = false
+local gameMonitor = { status = C_Sound and C_Sound.IsPlaying }
+function gameMonitor.duration(track)
+    local samples = MaliMusicPlayerDB and MaliMusicPlayerDB.gameDurations70959
+    return (track.fileDataID and samples and samples[track.fileDataID]) or track.duration or 0
+end
+local histories = { mp3 = { position = 0 }, game = { position = 0 } }
+local retryTrack, retryPosition, playbackStatus
+local menuShuffle, menuRepeat
+local diagnosticLog = {}
+local rebuild
+
+local function sourceOf(index)
+    return index > mp3Count and "game" or "mp3"
+end
 local db, current, selected, started = nil, nil, 1, 0
 local playing, loading, soundHandle = false, false, nil
 local diagnostics = false
@@ -18,6 +44,10 @@ local function say(message)
 end
 
 local function trace(message)
+    diagnosticLog[#diagnosticLog + 1] = message
+    if #diagnosticLog > 100 then
+        table.remove(diagnosticLog, 1)
+    end
     if diagnostics then
         say("[audio] " .. message)
     end
@@ -37,7 +67,7 @@ local function rememberSelection(index)
         return
     end
     selected = index
-    if db then
+    if db and tracks[index].path then
         db.selectedTrackPath = tracks[index].path
     end
 end
@@ -46,7 +76,7 @@ local function restoreSelection()
     selected = 1
     if db and type(db.selectedTrackPath) == "string" then
         for index, track in ipairs(tracks) do
-            if track.path == db.selectedTrackPath then
+            if track.path and track.path == db.selectedTrackPath then
                 selected = index
                 break
             end
@@ -148,7 +178,7 @@ f:SetScript("OnDragStart", f.StartMoving)
 f:SetScript("OnDragStop", function(self)
     savePosition(self, "position")
 end)
-f.TitleText:SetText("MaliMusicPlayer 0.8.9")
+f.TitleText:SetText("MaliMusicPlayer 0.9a")
 f:Hide()
 table.insert(UISpecialFrames, "MaliMusicPlayerFrame")
 
@@ -181,7 +211,7 @@ help:Hide()
 
 local tabs = {}
 
-local function makeTab(index, caption, width)
+local function makeTab(index, key, caption, width)
     local tab = CreateFrame("Button", nil, f)
     tab:SetSize(width, 32)
     tab:SetFrameLevel(math.max(library:GetFrameLevel(), settings:GetFrameLevel()) + 5)
@@ -207,22 +237,30 @@ local function makeTab(index, caption, width)
     highlight:SetPoint("BOTTOMRIGHT", -8, 5)
     highlight:SetColorTexture(1, 1, 1, 0.08)
     tab:SetScript("OnClick", function()
-        showTab(index == 1 and "library" or (index == 2 and "settings" or "help"))
+        showTab(key)
     end)
+    tab.key = key
     tabs[index] = tab
 end
 
-makeTab(1, "Library", 104)
-makeTab(2, "Settings / About", 160)
-makeTab(3, "Help", 90)
+makeTab(1, "library", "Library", 104)
+makeTab(2, "game", "Game Music", 130)
+makeTab(3, "settings", "Settings / About", 160)
+makeTab(4, "help", "Help", 90)
 
 showTab = function(which)
-    local selectedTab = which == "help" and 3 or (which == "settings" and 2 or 1)
-    library:SetShown(selectedTab == 1)
-    settings:SetShown(selectedTab == 2)
-    help:SetShown(selectedTab == 3)
-    for index, tab in ipairs(tabs) do
-        local active = index == selectedTab
+    local showLibrary = which == "library" or which == "game"
+    library:SetShown(showLibrary)
+    if showLibrary then
+        browseGame = which == "game"
+        if rebuild then
+            rebuild()
+        end
+    end
+    settings:SetShown(which == "settings")
+    help:SetShown(which == "help")
+    for _, tab in ipairs(tabs) do
+        local active = tab.key == which
         local prefix = active and "Interface/PaperDollInfoFrame/UI-Character-ActiveTab-"
             or "Interface/PaperDollInfoFrame/UI-Character-InActiveTab-"
         tab.left:SetTexture(prefix .. "Left")
@@ -269,8 +307,7 @@ for index = 1, VISIBLE_ROWS do
     row.duration:SetPoint("RIGHT", -4, 0)
     row:SetScript("OnClick", function(self)
         if self.track then
-            rememberSelection(self.track)
-            play(selected)
+            play(self.track, nil, true)
         end
     end)
     rows[index] = row
@@ -535,7 +572,7 @@ local function updateCompactStatus()
         return
     end
     if not playing or not current or not tracks[current] then
-        compactTime:SetText("Stopped")
+        compactTime:SetText(playbackStatus or "Stopped")
         return
     end
     local elapsed = math.max(0, GetTime() - started)
@@ -543,7 +580,7 @@ local function updateCompactStatus()
         compactTime:SetText(clock(elapsed))
         return
     end
-    local duration = tracks[current].duration or 0
+    local duration = gameMonitor.duration(tracks[current])
     compactTime:SetText(clock(elapsed) .. " / " .. (duration > 0 and clock(duration) or "--:--"))
 end
 
@@ -551,14 +588,14 @@ local function updateTime()
     if not current then
         return
     end
-    local duration = tracks[current].duration or 0
+    local duration = gameMonitor.duration(tracks[current])
     local elapsed = math.max(0, GetTime() - started)
     if duration > 0 then
         timing:SetText("Elapsed " .. clock(elapsed) .. "   |   Remaining -" .. clock(duration - elapsed)
             .. "   |   Total " .. clock(duration))
         progress:SetValue(math.min(1, elapsed / duration))
     else
-        timing:SetText("Elapsed " .. clock(elapsed) .. "   |   Duration unknown: regenerate library or use Next")
+        timing:SetText("Elapsed " .. clock(elapsed) .. "   |   Duration unknown")
         progress:SetValue(0)
     end
     updateCompactStatus()
@@ -573,7 +610,7 @@ refresh = function()
         if trackIndex then
             local track = tracks[trackIndex]
             row.title:SetText((playing and current == trackIndex and "> " or "") .. safe(label(track)))
-            row.duration:SetText((track.duration or 0) > 0 and clock(track.duration) or "--:--")
+            row.duration:SetText(gameMonitor.duration(track) > 0 and clock(gameMonitor.duration(track)) or "--:--")
             row:Show()
         else
             row:Hide()
@@ -591,18 +628,34 @@ refresh = function()
     updateCompactStatus()
 end
 
-local function rebuild()
+rebuild = function()
     wipe(filtered)
     local query = string.lower(search:GetText() or "")
-    for index, track in ipairs(tracks) do
+    local first = browseGame and (mp3Count + 1) or 1
+    local last = browseGame and #tracks or mp3Count
+    local total = last - first + 1
+    for index = first, last do
+        local track = tracks[index]
         if query == "" or string.find(string.lower(label(track)), query, 1, true) then
             filtered[#filtered + 1] = index
         end
     end
-    if query == "" then
-        resultCount:SetText(#tracks .. (#tracks == 1 and " track" or " tracks"))
+    if browseGame then
+        table.sort(filtered, function(left, right)
+            local leftName = string.lower(label(tracks[left]))
+            local rightName = string.lower(label(tracks[right]))
+            if leftName == rightName then
+                return left < right
+            end
+            return leftName < rightName
+        end)
+    end
+    if browseGame and total == 0 then
+        resultCount:SetText("Build 70959 only")
+    elseif query == "" then
+        resultCount:SetText(total .. (browseGame and " candidates" or (total == 1 and " track" or " tracks")))
     else
-        resultCount:SetText(#filtered .. " of " .. #tracks)
+        resultCount:SetText(#filtered .. " of " .. total)
     end
     FauxScrollFrame_SetOffset(scroll, 0)
     if scroll.ScrollBar then
@@ -620,108 +673,188 @@ search:SetScript("OnTextChanged", rebuild)
 
 local function stop()
     playing = false
+    retryTrack, retryPosition, playbackStatus = nil, nil, nil
     stopHandle()
     StopMusic()
     timing:SetText("Stopped")
-    compactTime:SetText("Stopped")
     progress:SetValue(0)
-    trace("Stop.")
     refresh()
 end
 
-play = function(index)
-    if not tracks[index] then
-        say("No tracks. Run UpdateLibrary.cmd, then restart WoW.")
-        return
-    end
+local function audioBlock()
     if GetCVar("Sound_EnableAllSound") == "0" then
-        say("Enable sound in WoW's audio settings.")
-        refresh()
-        return
+        return "Sound disabled"
+    elseif GetCVar("Sound_EnableMusic") == "0" then
+        return "Music disabled"
+    elseif musicVolume() <= 0 then
+        return "Muted externally"
     end
-    if GetCVar("Sound_EnableMusic") == "0" then
-        say("Music is disabled. Click Music: Off beside the volume slider to enable it, then press Play.")
-        refresh()
-        return
+end
+
+local function playbackFailure(index, position, status)
+    stop()
+    retryTrack, retryPosition, playbackStatus = index, position, status
+    timing:SetText(status .. ". Restore audio or check the track, then press Play to retry.")
+    refresh()
+    trace(status .. " track=" .. tostring(index))
+    say(status .. ". Press Play to retry after checking the track and audio settings.")
+    return false
+end
+
+play = function(index, position, explicitNavigation)
+    local track = tracks[index]
+    if not track then
+        say("No track selected or available.")
+        return false
     end
-    if musicVolume() <= 0 then
-        say("Music volume is 0% outside this player. Raise the slider, then press Play.")
-        refresh()
-        return
+    if not explicitNavigation and retryTrack == index then
+        position = retryPosition
+    end
+    local blocked = audioBlock()
+    if blocked then
+        return playbackFailure(index, position, blocked)
     end
     stopHandle()
     playing = false
     PlayMusic("Interface/AddOns/MaliMusicPlayer/Silence.ogg")
-    local success, handle = PlaySoundFile(tracks[index].path, "Music")
-    current = index
-    rememberSelection(index)
-    trace("Play: track=" .. index .. " volume=" .. musicVolume()
+    local success, handle = PlaySoundFile(track.fileDataID or track.path, "Music")
+    local source = sourceOf(index)
+    trace("Play: source=" .. source .. " track=" .. index .. " fileDataID=" .. tostring(track.fileDataID)
         .. " success=" .. tostring(success) .. " handle=" .. tostring(handle))
     if not success or not handle then
-        StopMusic()
-        timing:SetText("Playback failed. Check the file path / audio settings, then use Play to retry.")
-        progress:SetValue(0)
-        refresh()
-        if GetCVar("Sound_EnableMusic") ~= "0" then
-            compactTime:SetText("Playback failed")
+        if handle then
+            StopSound(handle)
         end
-        say("Could not start: " .. safe(label(tracks[index])))
-        return
+        return playbackFailure(index, position, "Playback failed")
     end
+    local history = histories[source]
+    if position then
+        history.position = position
+    elseif history[history.position] ~= index then
+        local discarded = #history - history.position
+        for slot = #history, history.position + 1, -1 do
+            history[slot] = nil
+        end
+        history[#history + 1] = index
+        local trimmed = #history > 11
+        if trimmed then
+            table.remove(history, 1)
+        end
+        history.position = #history
+        trace("History: source=" .. source .. " discardedForward=" .. discarded
+            .. " trimmedOldest=" .. (trimmed and 1 or 0))
+    end
+    current = index
+    rememberSelection(index)
+    retryTrack, retryPosition, playbackStatus = nil, nil, nil
     soundHandle = handle
+    gameMonitor.seen, gameMonitor.interrupted = false, loading
     started = GetTime()
     playing = true
     updateTime()
+    sync()
     refresh()
+    return true
 end
 
 advance = function(direction, automatic)
-    if #tracks == 0 then
-        return
+    local outgoing = current or selected
+    if not tracks[outgoing] then
+        return false
     end
-    local index = current or selected or 1
-    if automatic and db and db.repeatTrack then
-        play(index)
-        return
-    end
-    if db and db.shuffle and #tracks > 1 then
-        local nextIndex = math.random(#tracks - 1)
-        if nextIndex >= index then
-            nextIndex = nextIndex + 1
+    local source = sourceOf(outgoing)
+    local history = histories[source]
+    if source == "game" then
+        if automatic then
+            return play(outgoing, nil, true)
         end
-        index = nextIndex
-    else
-        index = ((index - 1 + direction) % #tracks) + 1
+        local position = history.position + direction
+        if history[position] then
+            return play(history[position], position, true)
+        end
+        return false
     end
-    play(index)
+    local first, count = 1, mp3Count
+    local shuffle = db and db.shuffle
+    local repeatTrack = db and db.repeatTrack
+    local index, position, reason = outgoing, nil, "sequential"
+    if automatic and repeatTrack then
+        reason = "repeat"
+    elseif direction < 0 and history.position > 1 then
+        position = history.position - 1
+        index, reason = history[position], "history-back"
+    elseif direction > 0 and history.position < #history and not (automatic and shuffle) then
+        position = history.position + 1
+        index, reason = history[position], "history-forward"
+    elseif direction < 0 and shuffle then
+        return false
+    elseif shuffle and count > 1 then
+        index = first + math.random(count - 1) - 1
+        if index >= outgoing then
+            index = index + 1
+        end
+        reason = "shuffle"
+    else
+        index = first + ((outgoing - first + direction) % count)
+    end
+    trace("Advance: " .. (automatic and "automatic" or "manual") .. " source=" .. source
+        .. " from=" .. outgoing .. " to=" .. index .. " reason=" .. reason
+        .. " repeat=" .. tostring(repeatTrack) .. " shuffle=" .. tostring(shuffle))
+    return play(index, position, true)
+end
+
+local function togglePlaybackSetting(key, source)
+    if db then
+        db[key] = not db[key]
+        trace("Setting: " .. key .. "=" .. tostring(db[key]) .. " via " .. source)
+        sync()
+    end
+end
+
+local function playSelected()
+    play(retryTrack or current or selected)
 end
 
 button(library, "Previous", 16, -619, 88, function()
     advance(-1, false)
 end)
 button(library, "Play", 110, -619, 70, function()
-    play(selected)
+    playSelected()
 end)
 button(library, "Stop", 186, -619, 70, stop)
 button(library, "Next", 262, -619, 70, function()
     advance(1, false)
 end)
 local shuffle = button(library, "Shuffle: Off", 338, -619, 120, function()
-    if db then
-        db.shuffle = not db.shuffle
-        sync()
-    end
+    togglePlaybackSetting("shuffle", "main")
 end)
 local repeatButton = button(library, "Repeat: Off", 464, -619, 130, function()
-    if db then
-        db.repeatTrack = not db.repeatTrack
-        sync()
-    end
+    togglePlaybackSetting("repeatTrack", "main")
 end)
 
 sync = function()
-    shuffle:SetText(db and db.shuffle and "Shuffle: On" or "Shuffle: Off")
-    repeatButton:SetText(db and db.repeatTrack and "Repeat: On" or "Repeat: Off")
+    local game = current and sourceOf(current) == "game"
+    local shuffleText = db and db.shuffle and "Shuffle: On" or "Shuffle: Off"
+    local repeatText = db and db.repeatTrack and "Repeat: On" or "Repeat: Off"
+    if game then
+        shuffleText = "Shuffle: N/A"
+        repeatText = gameMonitor.status and "Loop: On" or "Loop: N/A"
+    end
+    local function apply(shuffleControl, repeatControl)
+        shuffleControl:SetText(shuffleText)
+        repeatControl:SetText(repeatText)
+        if game then
+            shuffleControl:Disable()
+            repeatControl:Disable()
+        else
+            shuffleControl:Enable()
+            repeatControl:Enable()
+        end
+    end
+    apply(shuffle, repeatButton)
+    if menuShuffle and menuRepeat then
+        apply(menuShuffle, menuRepeat)
+    end
 end
 
 -- Volume Slider
@@ -802,6 +935,7 @@ musicToggle:SetScript("OnHide", function()
     GameTooltip:Hide()
 end)
 f:SetScript("OnShow", function()
+    sync()
     syncVolume()
     syncMusicToggle()
 end)
@@ -856,7 +990,7 @@ local expandButton = iconButton(179, -4, "Interface/Buttons/UI-PlusButton-UP", "
     setCompact(false)
 end)
 local playButton = iconButton(154, -29, "PLAY", "Play / restart current track", function()
-    play(current or selected)
+    playSelected()
 end)
 local previousButton = iconButton(128, -29, "Interface/Buttons/UI-SpellbookIcon-PrevPage-Up", "Previous track", function()
     advance(-1, false)
@@ -1065,7 +1199,7 @@ end)
 
 font(settings, "GameFontNormal", 20, -565, 555):SetText("About")
 font(settings, "GameFontHighlightSmall", 24, -583, 555):SetText(
-    "MaliMusicPlayer v0.8.9 - By Mali Gnosis, for Mali Gnosis."
+    "MaliMusicPlayer v0.9a - By Mali Gnosis, for Mali Gnosis."
 )
 local quote = font(settings, "GameFontHighlightSmall", 24, -600, 555)
 quote:SetWordWrap(false)
@@ -1191,7 +1325,7 @@ local function action(y, caption, callback)
 end
 
 action(-55, "Play / restart current track", function()
-    play(current or selected)
+    playSelected()
 end)
 action(-82, "Stop", stop)
 action(-109, "Previous track", function()
@@ -1200,17 +1334,11 @@ end)
 action(-136, "Next track", function()
     advance(1, false)
 end)
-local menuShuffle = action(-163, "Shuffle: Off", function()
-    if db then
-        db.shuffle = not db.shuffle
-        sync()
-    end
+menuShuffle = action(-163, "Shuffle: Off", function()
+    togglePlaybackSetting("shuffle", "quick menu")
 end)
-local menuRepeat = action(-190, "Repeat: Off", function()
-    if db then
-        db.repeatTrack = not db.repeatTrack
-        sync()
-    end
+menuRepeat = action(-190, "Repeat: Off", function()
+    togglePlaybackSetting("repeatTrack", "quick menu")
 end)
 action(-217, "Open Settings / About", function()
     showTab("settings")
@@ -1224,8 +1352,7 @@ local function toggleMenu()
     end
     local index = current or selected
     menuTrack:SetText(tracks[index] and safe(label(tracks[index])) or "No track selected")
-    menuShuffle:SetText(db and db.shuffle and "Shuffle: On" or "Shuffle: Off")
-    menuRepeat:SetText(db and db.repeatTrack and "Repeat: On" or "Repeat: Off")
+    sync()
     local x, y = GetCursorPosition()
     local scale = UIParent:GetEffectiveScale()
     menu:ClearAllPoints()
@@ -1406,7 +1533,7 @@ local function createStandardMinimapButton()
     if minimapRetryFrame then
         minimapRetryFrame:UnregisterAllEvents()
     end
-    trace("0.8.9 minimap: LibDBIcon active; Warlock launcher registered.")
+    trace("0.9a minimap: LibDBIcon active; Warlock launcher registered.")
     return true
 end
 
@@ -1543,7 +1670,7 @@ local function createFallbackMinimapButton()
     Minimap:HookScript("OnSizeChanged", position)
     position()
     control:SetShown(not (db and type(db.minimap) == "table" and db.minimap.hide))
-    say("0.8.9 minimap: custom fallback; LibDBIcon/LibDataBroker not loaded. Warning may remain.")
+    trace("0.9a minimap: custom fallback; LibDBIcon/LibDataBroker not loaded.")
 end
 
 local function createMinimapButton()
@@ -1626,6 +1753,7 @@ events:SetScript("OnEvent", function(self, event, name)
     if event == "ADDON_LOADED" and name == "MaliMusicPlayer" then
         MaliMusicPlayerDB = MaliMusicPlayerDB or {}
         db = MaliMusicPlayerDB
+        trace("Startup: repeat=" .. tostring(db.repeatTrack) .. " shuffle=" .. tostring(db.shuffle))
         if not db.backgroundAudioDefault085 then
             db.backgroundAudioDefault085 = true
             SetCVar("Sound_EnableSoundWhenGameIsInBG", "1")
@@ -1673,18 +1801,13 @@ events:SetScript("OnEvent", function(self, event, name)
         f:SetAlpha(db.fullPlayerOpacity)
         opacityInitializing = false
         applyOpacity()
-        local unknown = 0
-        for _, track in ipairs(tracks) do
-            if (track.duration or 0) <= 0 then
-                unknown = unknown + 1
-            end
-        end
-        say("v0.8.9: " .. #tracks .. " tracks; " .. unknown .. " unknown durations. /mmp to open.")
+        say("v0.9a: " .. mp3Count .. " library tracks, " .. (#tracks - mp3Count) .. " game music tracks.")
     elseif event == "PLAYER_LOGIN" then
         registerOptionsPanel()
         createMinimapButton()
     elseif event == "LOADING_SCREEN_ENABLED" then
         loading = true
+        gameMonitor.interrupted = true
     elseif event == "LOADING_SCREEN_DISABLED" then
         loading = false
         if playing then
@@ -1725,17 +1848,34 @@ events:SetScript("OnUpdate", function(self, elapsed)
         return
     end
     tick = 0
-    if musicVolume() <= 0 then
-        stop()
-        timing:SetText("Music muted outside this player. Raise volume, then press Play.")
-        if GetCVar("Sound_EnableMusic") ~= "0" then
-            compactTime:SetText("Muted externally")
-        end
-        trace("External zero detected; stopped without automatic recovery.")
+    local blocked = audioBlock()
+    if blocked then
+        playbackFailure(current, nil, blocked)
         return
     end
     updateTime()
-    local duration = tracks[current].duration or 0
+    local track = tracks[current]
+    if track.fileDataID then
+        if not gameMonitor.status or not soundHandle then
+            return
+        end
+        if gameMonitor.status(soundHandle) then
+            gameMonitor.seen = true
+        elseif gameMonitor.seen or GetTime() - started > 3 then
+            if gameMonitor.seen and not gameMonitor.interrupted then
+                local observed = GetTime() - started
+                db.gameDurations70959 = db.gameDurations70959 or {}
+                db.gameDurations70959[track.fileDataID] = observed
+                trace(string.format("Game finish: id=%d observed=%.2fs; looping", track.fileDataID, observed))
+                advance(1, true)
+            else
+                trace("Game playback stopped without a clean sample")
+                stop()
+            end
+        end
+        return
+    end
+    local duration = track.duration or 0
     if duration > 0 and GetTime() - started >= duration + 0.4 then
         advance(1, true)
     end
@@ -1761,7 +1901,7 @@ SlashCmdList.MALIMUSICPLAYER = function(message)
     elseif message == "prev" then
         advance(-1, false)
     elseif message == "play" then
-        play(selected)
+        playSelected()
     else
         togglePlayer()
     end
@@ -1778,10 +1918,20 @@ SlashCmdList.MALIMUSICPLAYERDIAG = function(message)
     elseif message == "off" then
         diagnostics = false
         say("Audio diagnostics disabled.")
+    elseif message == "dump" then
+        for _, entry in ipairs(diagnosticLog) do
+            say("[audio] " .. entry)
+        end
+        return
     elseif message ~= "status" and message ~= "" then
-        say("/mmpdiag on | off | status")
+        say("/mmpdiag on | off | status | dump")
         return
     end
+    local source = sourceOf(current or selected)
+    local history = histories[source]
+    say("[audio] source=" .. source .. " history=" .. history.position .. "/" .. #history
+        .. " repeat=" .. tostring(db and db.repeatTrack) .. " shuffle=" .. tostring(db and db.shuffle)
+        .. " retry=" .. tostring(retryTrack))
     say("[audio] volume=" .. musicVolume() .. " playing=" .. tostring(playing)
         .. " handle=" .. tostring(soundHandle) .. " track=" .. tostring(current)
         .. " selected=" .. tostring(selected) .. " allSound=" .. tostring(GetCVar("Sound_EnableAllSound"))
