@@ -12,7 +12,7 @@ Exit World of Warcraft and extract the release archive. Copy the included add-on
 
 ```text
 World of Warcraft/
-└── _anniversary_/
+└── _<GAMEVERSION>_/
     └── Interface/
         └── AddOns/
             └── MaliMusicPlayer/
