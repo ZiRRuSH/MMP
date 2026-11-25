@@ -1,11 +1,13 @@
-## Interface: 16001, 120100, 120105, 20506
+## Interface: 20506, 16001, 120100, 120105
 ## Title: MaliMusicPlayer
-## Notes: Play your own music and browse in-game music.
+## Notes: Play your own MP3s, or browse and play the game's own music.
 ## Author: Mali Gnosis
-## Version: 0.9a
+## Version: 1.0.1
 ## SavedVariables: MaliMusicPlayerDB
-## OptionalDeps: LibStub, LibDataBroker-1.1, LibDBIcon-1.0
+## OptionalDeps: MaliMusic, LibStub, LibDataBroker-1.1, LibDBIcon-1.0
+## Category: Music
+## IconTexture: Interface\AddOns\MaliMusicPlayer\media\icon
 
-Library.lua
 GameMusic.lua
+Style.lua
 Player.lua
