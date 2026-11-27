@@ -1,5 +1,43 @@
 # 📜 Changelog
 
+## 🧩 1.2.1 — Family style
+
+- **Settings is just settings now.** The About section is gone, and the tab is grouped into **Compact player**, **Full player** and **Sound**.
+- **Flat sliders and checkboxes** on the Settings tab, in your theme's colors, to match the rest of the player.
+- **Shared Mali Style.** MaliMusicPlayer now uses the same style code as the other Mali add-ons. Your colors and saved profiles carry over on their own.
+- **Shuffle and Repeat** now light up their icon when they're on.
+
+## 🔮 1.2 — Soulstone
+
+- **All Mali, all the time.** The Classic look is retired, so every part of the player now uses Mali Style. If you were on Classic, you'll land in Mali Style with your colors and profiles intact.
+- **Soulstone is the new default.** Fresh installs and **Restore default colors** now give you Soulstone's shadow purple. The original Mali colors are still a preset in the dropdown.
+- **Song titles in Chinese, Japanese or Korean** now show up properly. Inter doesn't include those characters, so those titles switch to WoW's own font automatically. Korean and Chinese game clients use WoW's font throughout.
+- **Crisper lines.** A bug kept 1px borders from snapping to exact screen pixels; they now stay sharp at any UI scale.
+- The Flavor tab is shorter now that the UI style option is gone, and the color dropdown is a little more reliable.
+
+## 🌈 1.1 — Themes
+
+- **Redesigned Flavor tab:** UI style and color profiles are now tidy dropdown menus, and the six color swatches sit in a compact grid.
+- **12 color presets**, each with its own vibe: Mali, Jazz 92, Soulstone, Fel, Terminal, Amber CRT, Rave 99, Trance State, Midnight, Ember, Graphite and Rosewater. Shadowflame, Arcane and Gilded are retired; any profiles you saved are untouched.
+- **Profiles in one menu:** presets and your saved profiles share a single dropdown, each with a color chip so you can tell them apart. Hover one of your profiles and click the red × to delete it (you'll be asked to confirm first). **Save as...** names and saves your current colors.
+- Mali Style now always uses the Inter font; Classic keeps the WoW font.
+- **AddOns list fix:** MaliMusicPlayer now lives under **Media**, with your MaliMusic folder tucked underneath it. Run the library updater once after updating to apply it.
+- If MaliMusic is enabled but your playlist didn't load, the player no longer says the folder is turned off.
+
+## 🎨 1.0.3
+
+- **Color presets** on the Flavor tab: Mali, Fel, Shadowflame, Arcane and Gilded.
+- **Save your own color profiles:** name your current colors and save them, then load or delete them any time. Profiles are shared across all your characters.
+- **Live compact preview:** the compact player shows up while you're on the Settings or Flavor tab, so you can see your changes as you make them.
+- Fixed the track list jumping back to the top when hovering the search box.
+- If your MaliMusic folder is from an older version, you'll get a one-time tip at login to run the library updater so it sits under MaliMusicPlayer in the AddOns list.
+
+## 🧹 1.0.2
+
+- **Tidier AddOns list:** **MaliMusic** now shows with the MaliMusicPlayer icon, nested under **MaliMusicPlayer** instead of the other way around. Run the library updater once after updating to refresh your MaliMusic folder.
+- Your playlist now loads at login, so it works whatever order the game loads the two folders in.
+- Game Music: removed an odd **Arathi Basin** entry that only held a shared Felwood theme used by one building there. Battleground music is under **Battlegrounds & Events › Battlegrounds**.
+
 ## 🛡️ 1.0.1 — Your music is safe from updates
 
 **Your music and playlist now live in their own folder: `Interface/AddOns/MaliMusic`.**

@@ -2,10 +2,11 @@
 ## Title: MaliMusicPlayer
 ## Notes: Play your own MP3s, or browse and play the game's own music.
 ## Author: Mali Gnosis
-## Version: 1.0.1
+## Version: 1.2.1
 ## SavedVariables: MaliMusicPlayerDB
-## OptionalDeps: MaliMusic, LibStub, LibDataBroker-1.1, LibDBIcon-1.0
-## Category: Music
+## OptionalDeps: LibStub, LibDataBroker-1.1, LibDBIcon-1.0
+## Category: Media
+## Group: MaliMusicPlayer
 ## IconTexture: Interface\AddOns\MaliMusicPlayer\media\icon
 
 GameMusic.lua

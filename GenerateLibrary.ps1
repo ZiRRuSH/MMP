@@ -77,7 +77,12 @@ if (Test-Path -LiteralPath $mainToc) {
 $tocLines=@(
     $interface,
     '## Title: MaliMusic',
-    '## Notes: Your music and playlist for MaliMusicPlayer. Made by the library updater; add-on updates never touch this folder.',
+    '## IconTexture: Interface\AddOns\MaliMusicPlayer\media\icon',
+    '## Dependencies: MaliMusicPlayer',
+    '## Group: MaliMusicPlayer',
+    '## Category: Media',
+    '## X-MaliMusic-Format: 2',
+    '## Notes: Your MP3s and playlist for MaliMusicPlayer. No code, just your music. Keep it enabled so the player can find it.',
     '## Author: Mali Gnosis',
     '',
     'Library.lua'

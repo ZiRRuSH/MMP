@@ -1122,10 +1122,6 @@ MaliMusicPlayerGameMusic = {
                 { id = 8180746, title = "Alterac Valley 5" },
                 { id = 8180748, title = "Alterac Valley 6" },
             } },
-            { name = "Arathi Basin", tracks = {
-                { id = 8180738, title = "Cursed Land Felwood 1" },
-                { id = 8180742, title = "Cursed Land Felwood 2" },
-            } },
             { name = "Battlegrounds", tracks = {
                 { id = 8181023, title = "Battleground 1" },
                 { id = 8181021, title = "Battleground 2" },

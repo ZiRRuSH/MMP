@@ -1,13 +1,21 @@
--- MaliMusicPlayer 1.0.1
+-- MaliMusicPlayer
 
-local VERSION = "1.0.1"
-local style = MaliMusicPlayerStyle
--- Widgets that exist in only one style; style.OnApply shows the right set.
-local classicOnly, maliOnly = {}, {}
-local function classicWidget(widget)
-    classicOnly[#classicOnly + 1] = widget
-    return widget
+local VERSION
+do
+    local getMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+    VERSION = getMetadata and getMetadata("MaliMusicPlayer", "Version") or "?"
 end
+local style = select(2, ...).style
+style.Configure({
+    colorNames = {
+        { key = "background", label = "Background" },
+        { key = "border", label = "Border" },
+        { key = "accent", label = "Accent (active tab, progress)" },
+        { key = "highlight", label = "Hover" },
+        { key = "selection", label = "Playing track" },
+        { key = "secondary", label = "Open place (Game Music)" },
+    },
+})
 local maliUpdate, maliSyncVolume, currentTab, layout
 
 -- State
@@ -15,11 +23,10 @@ local maliUpdate, maliSyncVolume, currentTab, layout
 -- tracks holds your MP3s first (1..mp3Count), then the game music. Game tracks are added
 -- place by place, so every place is a first..last range of indexes. The same game track
 -- can sit in more than one place (a shared theme, for example); each copy is its own entry.
+-- Your MP3s come from the MaliMusic add-on, which loads after this one, so they are
+-- slotted in at PLAYER_LOGIN.
 local tracks = {}
-for _, track in ipairs(MaliMusicPlayerLibrary or {}) do
-    tracks[#tracks + 1] = track
-end
-local mp3Count = #tracks
+local mp3Count = 0
 
 local gameCategories = {}  -- { name, key, places = { { name, key, first, last } } }
 local gamePlaces = {}      -- flat list of every place, for lookups
@@ -238,58 +245,21 @@ end)
 f.TitleText:SetText("MaliMusicPlayer")
 f:Hide()
 
--- Everything BasicFrameTemplateWithInset drew (art, title bar, inset) shows only in Classic;
--- Mali style draws a flat panel instead. The close button stays in both.
+-- Mali Style draws a flat panel over BasicFrameTemplateWithInset; the template's art,
+-- title and buttons stay hidden (the Mali header has its own close button).
 do
-    local template = {}
     for _, region in ipairs({ f:GetRegions() }) do
-        template[#template + 1] = region
+        region:Hide()
     end
     for _, child in ipairs({ f:GetChildren() }) do
-        if child:GetObjectType() ~= "Button" then
-            template[#template + 1] = child
-        else
-            classicWidget(child)
-        end
+        child:Hide()
     end
-    if f.TitleText then
-        classicWidget(f.TitleText)
-    end
-    f.maliTitle = style.Font(f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"), 15, "medium")
-    f.maliTitle:SetPoint("TOPLEFT", 14, -11)
-    f.maliTitle:SetText("MaliMusicPlayer")
-    style.Panel(f, template)
-    style.OnApply(function(mali)
-        f.maliTitle:SetShown(mali)
-    end)
+    f.header = style.Font(f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"), 15, "medium")
+    f.header:SetPoint("TOPLEFT", 14, -11)
+    f.header:SetText("MaliMusicPlayer")
+    style.Panel(f)
 end
 table.insert(UISpecialFrames, "MaliMusicPlayerFrame")
-
-local now = classicWidget(font(f, "GameFontHighlight", 16, -38, 575))
-local timing = classicWidget(font(f, "GameFontNormalSmall", 16, -64, 575))
-timing:SetText("Stopped")
-
-local progress = classicWidget(CreateFrame("StatusBar", nil, f))
-progress:SetPoint("TOPLEFT", 18, -87)
-progress:SetSize(572, 7)
-progress:SetStatusBarTexture("Interface/TargetingFrame/UI-StatusBar")
-progress:SetStatusBarColor(0.25, 0.7, 1)
-progress:SetMinMaxValues(0, 1)
-progress:SetValue(0)
-
-local progressBackground = progress:CreateTexture(nil, "BACKGROUND")
-progressBackground:SetAllPoints()
-progressBackground:SetColorTexture(0.1, 0.1, 0.1, 1)
-style.OnApply(function(mali)
-    local accent, background = style.Color("accent"), style.Color("background")
-    if mali then
-        progress:SetStatusBarColor(accent[1], accent[2], accent[3])
-        progressBackground:SetColorTexture(background[1] * 0.5, background[2] * 0.5, background[3] * 0.5, 1)
-    else
-        progress:SetStatusBarColor(0.25, 0.7, 1)
-        progressBackground:SetColorTexture(0.1, 0.1, 0.1, 1)
-    end
-end)
 
 local library = CreateFrame("Frame", nil, f)
 library:SetAllPoints()
@@ -317,19 +287,8 @@ local function makeTab(index, key, caption, width)
     else
         tab:SetPoint("TOPLEFT", tabs[index - 1], "TOPRIGHT", -6, 0)
     end
-    tab.left = tab:CreateTexture(nil, "BACKGROUND")
-    tab.left:SetPoint("TOPLEFT")
-    tab.left:SetSize(20, 32)
-    tab.right = tab:CreateTexture(nil, "BACKGROUND")
-    tab.right:SetPoint("TOPRIGHT")
-    tab.right:SetSize(20, 32)
-    tab.middle = tab:CreateTexture(nil, "BACKGROUND")
-    tab.middle:SetPoint("TOPLEFT", tab.left, "TOPRIGHT")
-    tab.middle:SetPoint("BOTTOMRIGHT", tab.right, "BOTTOMLEFT")
-    tab.caption = tab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    tab.caption:SetPoint("CENTER")
-    tab.caption:SetText(caption)
-    style.Font(tab.caption, 12, "medium")
+    tab:SetFontString(tab:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
+    tab:SetText(caption)
     local highlight = tab:CreateTexture(nil, "HIGHLIGHT")
     highlight:SetPoint("TOPLEFT", 8, -4)
     highlight:SetPoint("BOTTOMRIGHT", -8, 5)
@@ -344,12 +303,15 @@ end
 
 makeTab(1, "library", "Library", 104)
 makeTab(2, "game", "Game Music", 130)
-makeTab(3, "settings", "Settings / About", 160)
+makeTab(3, "settings", "Settings", 104)
 makeTab(4, "flavor", "Flavor", 90)
 makeTab(5, "help", "Help", 90)
 
 showTab = function(which)
     currentTab = which
+    if f.onTabShown then
+        f.onTabShown(which)
+    end
     local showLibrary = which == "library" or which == "game"
     library:SetShown(showLibrary)
     if showLibrary then
@@ -364,16 +326,8 @@ showTab = function(which)
     end
     for _, tab in ipairs(tabs) do
         local active = tab.key == which
-        local prefix = active and "Interface/PaperDollInfoFrame/UI-Character-ActiveTab-"
-            or "Interface/PaperDollInfoFrame/UI-Character-InActiveTab-"
-        tab.left:SetTexture(prefix .. "Left")
-        tab.middle:SetTexture(prefix .. "Middle")
-        tab.right:SetTexture(prefix .. "Right")
-        tab.caption:SetTextColor(active and 1 or 0.85, active and 0.82 or 0.85, active and 0 or 0.85)
-        tab.caption:ClearAllPoints()
-        tab.caption:SetPoint("CENTER", 0, style.IsMali() and 0 or (active and 2 or -1))
         tab:Show()
-        style.SetTabActive(tab, active)
+        style.SetButtonActive(tab, active)
     end
 end
 
@@ -397,7 +351,7 @@ resultCount:ClearAllPoints()
 resultCount:SetPoint("TOPRIGHT", library, "TOPRIGHT", -24, -149)
 resultCount:SetJustifyH("RIGHT")
 resultCount:SetText("0 tracks")
-style.EditBox(search, "Search tracks, places, categories")
+style.EditBox(search, "Search tracks, places, categories", true)
 library.gameNote = style.Font(library:CreateFontString(nil, "OVERLAY", "GameFontHighlight"), 13)
 library.gameNote:SetPoint("TOPLEFT", 30, -200)
 library.gameNote:SetPoint("RIGHT", -40, 0)
@@ -446,7 +400,7 @@ local function getRow(index)
     row.chevron:Hide()
     row.speaker = row:CreateTexture(nil, "ARTWORK")
     row.speaker:SetSize(13, 13)
-    row.speaker:SetTexture(style.MEDIA .. "icons\\volume")
+    row.speaker:SetTexture(style.Icon("volume"))
     row.speaker:Hide()
     row.title = style.Font(row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"), 12)
     row.title:SetPoint("RIGHT", -70, 0)
@@ -467,7 +421,7 @@ end
 for index = 1, VISIBLE_ROWS do
     getRow(index)
 end
-style.ScrollBar(scroll.ScrollBar or _G["MaliMusicPlayerScrollScrollBar"])
+style.Scroll(scroll)
 
 -- Compact Player
 
@@ -575,7 +529,7 @@ local function resetMarquee()
     marqueeWait = 2
     marqueeTick = 0
     title:SetWidth(math.max(width, 1))
-    titleRepeat:SetText(marqueeText or "")
+    style.SetText(titleRepeat, marqueeText or "")
     titleRepeat:SetWidth(math.max(width, 1))
     marqueeCycle = width + 40
     titleRepeat:ClearAllPoints()
@@ -593,7 +547,7 @@ local function setTitle(value)
     end
     marqueeText = value
     title:SetWidth(0)
-    title:SetText(value)
+    style.SetText(title, value)
     resetMarquee()
     if GameTooltip:GetOwner() == titleViewport and GameTooltip:IsShown() then
         showTitleTooltip()
@@ -650,18 +604,11 @@ local function applyOpacity()
     titleRepeat:SetAlpha(textAlpha)
     compactTime:SetAlpha(textAlpha)
     local alpha = opacity(db and db.compactBackground, 0, 0.85)
-    if style.IsMali() then
-        local background, border = style.Color("background"), style.Color("border")
-        compactBackground:SetColorTexture(background[1], background[2], background[3], alpha)
-        for _, edge in ipairs(compactEdges) do
-            edge:SetColorTexture(border[1], border[2], border[3], math.min(1, alpha * 2))
-            edge:Show()
-        end
-    else
-        compactBackground:SetColorTexture(0.025, 0.025, 0.025, alpha)
-        for _, edge in ipairs(compactEdges) do
-            edge:Hide()
-        end
+    local background, border = style.Color("background"), style.Color("border")
+    compactBackground:SetColorTexture(background[1], background[2], background[3], alpha)
+    for _, edge in ipairs(compactEdges) do
+        edge:SetColorTexture(border[1], border[2], border[3], math.min(1, alpha * 2))
+        edge:Show()
     end
 end
 
@@ -713,40 +660,6 @@ local function hoverHandlers(control, caption)
     compactButtons[#compactButtons + 1] = control
 end
 
-local function iconButton(x, y, texture, tooltip, callback)
-    local control = CreateFrame("Button", nil, compact)
-    control:SetPoint("TOPLEFT", x, y)
-    control:SetSize(23, 23)
-    local background = control:CreateTexture(nil, "BACKGROUND")
-    background:SetAllPoints()
-    background:SetColorTexture(0.08, 0.08, 0.08, 0.4)
-    if texture == "PLAY" then
-        for row = 0, 10 do
-            local line = control:CreateTexture(nil, "ARTWORK")
-            line:SetColorTexture(0.95, 0.8, 0.35, 1)
-            line:SetPoint("TOPLEFT", control, "CENTER", -4, 5 - row)
-            line:SetSize(11 - 2 * math.abs(row - 5), 1)
-        end
-    elseif texture then
-        control:SetNormalTexture(texture)
-        local icon = control:GetNormalTexture()
-        icon:ClearAllPoints()
-        icon:SetPoint("CENTER")
-        icon:SetSize(21, 21)
-    else
-        local icon = control:CreateTexture(nil, "ARTWORK")
-        icon:SetSize(9, 9)
-        icon:SetPoint("CENTER")
-        icon:SetColorTexture(0.95, 0.8, 0.35, 1)
-    end
-    local highlight = control:CreateTexture(nil, "HIGHLIGHT")
-    highlight:SetAllPoints()
-    highlight:SetColorTexture(1, 1, 1, 0.15)
-    control:SetScript("OnClick", callback)
-    hoverHandlers(control, tooltip)
-    return control
-end
-
 -- Playback Display
 
 local function updateCompactStatus()
@@ -755,12 +668,8 @@ local function updateCompactStatus()
         compactTime:SetTextColor(1, 0.35, 0.35)
         return
     end
-    if style.IsMali() then
-        local accent = style.Color("accent")
-        compactTime:SetTextColor(accent[1], accent[2], accent[3])
-    else
-        compactTime:SetTextColor(1, 0.82, 0)
-    end
+    local accent = style.Color("accent")
+    compactTime:SetTextColor(accent[1], accent[2], accent[3])
     if not playing or not current or not tracks[current] then
         compactTime:SetText(playbackStatus or "Stopped")
         return
@@ -778,16 +687,6 @@ local function updateTime()
     if not current then
         return
     end
-    local duration = gameMonitor.duration(tracks[current])
-    local elapsed = math.max(0, GetTime() - started)
-    if duration > 0 then
-        timing:SetText("Elapsed " .. clock(elapsed) .. "   |   Remaining -" .. clock(duration - elapsed)
-            .. "   |   Total " .. clock(duration))
-        progress:SetValue(math.min(1, elapsed / duration))
-    else
-        timing:SetText("Elapsed " .. clock(elapsed) .. "   |   Duration unknown")
-        progress:SetValue(0)
-    end
     updateCompactStatus()
     if maliUpdate then
         maliUpdate()
@@ -798,7 +697,6 @@ refresh = function()
     FauxScrollFrame_Update(scroll, #filtered, visibleRows, ROW_HEIGHT)
     local offset = FauxScrollFrame_GetOffset(scroll)
     local playingPlace = playing and current and tracks[current] and tracks[current].place
-    local mali = style.IsMali()
     local accent = style.Color("accent")
     for index = 1, math.max(visibleRows, #rows) do
         local row = index <= visibleRows and getRow(index) or rows[index]
@@ -819,88 +717,65 @@ refresh = function()
             end
             local marker = holds and not entry.open and PLAYING_MARK or ""
             local indent = entry.place and 20 or 2
-            if mali then
-                row.header:Hide()
-                row.chevron:SetTexture(style.MEDIA .. "icons\\" .. (entry.open and "chevron-down" or "chevron-right"))
-                row.chevron:ClearAllPoints()
-                row.chevron:SetPoint("LEFT", indent, 0)
-                local chevron = entry.place and (entry.open and style.Color("openPlace") or { 0.66, 0.64, 0.7 }) or accent
-                row.chevron:SetVertexColor(chevron[1], chevron[2], chevron[3])
-                row.chevron:Show()
-                row.title:SetPoint("LEFT", indent + 18, 0)
-            else
-                row.header:SetShown(not entry.place)
-                row.header:SetColorTexture(1, 0.82, 0, 0.07)
-                row.title:SetPoint("LEFT", indent, 0)
-            end
-            local arrow = mali and "" or (entry.open and "[-] " or "[+] ")
+            row.header:Hide()
+            row.chevron:SetTexture(style.Icon(entry.open and "chevron-down" or "chevron-right"))
+            row.chevron:ClearAllPoints()
+            row.chevron:SetPoint("LEFT", indent, 0)
+            local chevron = entry.place and (entry.open and style.Color("secondary") or { 0.66, 0.64, 0.7 }) or accent
+            row.chevron:SetVertexColor(chevron[1], chevron[2], chevron[3])
+            row.chevron:Show()
+            row.title:SetPoint("LEFT", indent + 18, 0)
             if entry.place then
                 local name = safe(entry.place.name)
-                if mali and entry.open then
-                    local open = style.Color("openPlace")
+                if entry.open then
+                    local open = style.Color("secondary")
                     name = string.format("|cff%02x%02x%02x%s|r", math.floor(open[1] * 255 + 0.5),
                         math.floor(open[2] * 255 + 0.5), math.floor(open[3] * 255 + 0.5), name)
                 end
-                row.title:SetText(arrow .. name .. marker)
+                style.SetText(row.title, name .. marker)
                 row.duration:SetText(entry.place.last - entry.place.first + 1 .. "")
             else
-                row.title:SetText(arrow .. "|cffffd100" .. safe(entry.category.name) .. "|r" .. marker)
+                style.SetText(row.title, "|cffffd100" .. safe(entry.category.name) .. "|r" .. marker)
                 row.duration:SetText(#entry.category.places .. (#entry.category.places == 1 and " place" or " places"))
             end
             row.duration:SetTextColor(0.6, 0.58, 0.64)
-            if not mali then
-                row.duration:SetTextColor(1, 0.82, 0)
-            end
             row:Show()
         elseif entry then
             local track = tracks[entry]
             local isCurrent = playing and current == entry
-            local indent = track.place and (mali and 44 or 40) or 4
+            local indent = track.place and 44 or 4
             if isCurrent then
-                local selection = mali and style.Color("selection") or { 0.25, 0.7, 1 }
-                row.header:SetColorTexture(selection[1], selection[2], selection[3], mali and 0.7 or 0.12)
+                local selection = style.Color("selection")
+                row.header:SetColorTexture(selection[1], selection[2], selection[3], 0.7)
                 row.header:Show()
-            elseif mali and filtered.stripe and filtered.stripe[offset + index] then
+            elseif filtered.stripe and filtered.stripe[offset + index] then
                 row.header:SetColorTexture(1, 1, 1, 0.035)
                 row.header:Show()
             else
                 row.header:Hide()
             end
-            if mali and isCurrent then
+            if isCurrent then
                 row.speaker:ClearAllPoints()
                 row.speaker:SetPoint("LEFT", indent, 0)
                 row.speaker:SetVertexColor(accent[1], accent[2], accent[3])
                 row.speaker:Show()
                 row.title:SetPoint("LEFT", indent + 18, 0)
-                row.title:SetText("|cffffffff" .. safe(label(track)) .. "|r")
+                style.SetText(row.title, "|cffffffff" .. safe(label(track)) .. "|r")
             else
                 row.title:SetPoint("LEFT", indent, 0)
-                row.title:SetText(isCurrent and ("|cffffffff" .. safe(label(track)) .. "|r" .. PLAYING_MARK) or safe(label(track)))
+                style.SetText(row.title, safe(label(track)))
             end
             row.duration:SetText(gameMonitor.duration(track) > 0 and clock(gameMonitor.duration(track)) or "--:--")
-            if mali then
-                if isCurrent then
-                    row.duration:SetTextColor(accent[1], accent[2], accent[3])
-                else
-                    row.duration:SetTextColor(0.6, 0.58, 0.64)
-                end
+            if isCurrent then
+                row.duration:SetTextColor(accent[1], accent[2], accent[3])
             else
-                row.duration:SetTextColor(1, 0.82, 0)
+                row.duration:SetTextColor(0.6, 0.58, 0.64)
             end
             row:Show()
         else
             row.header:Hide()
             row:Hide()
         end
-    end
-    if current then
-        local place = tracks[current].place
-        local where = place and ("|cffaaaaaa" .. safe(place.category.name .. " > " .. place.name) .. " >|r ") or ""
-        now:SetText((playing and "Playing: " or "Stopped: ") .. where .. safe(label(tracks[current])))
-    elseif tracks[selected] then
-        now:SetText("Selected: " .. safe(label(tracks[selected])))
-    else
-        now:SetText("Select a song to play.")
     end
     local index = current or selected
     setTitle(tracks[index] and safe(label(tracks[index])) or "MaliMusicPlayer")
@@ -926,7 +801,7 @@ function library.companionState()
     if reason == "INTERFACE_VERSION" then
         return "outdated"
     end
-    return "disabled"
+    return loadable and "loaded" or "disabled"
 end
 
 function library.musicHelp()
@@ -1040,8 +915,13 @@ end
 scroll:SetScript("OnVerticalScroll", function(self, offset)
     FauxScrollFrame_OnVerticalScroll(self, offset, ROW_HEIGHT, refresh)
 end)
-search:SetScript("OnTextChanged", function()
-    rebuild()
+library.lastQuery = ""
+search:SetScript("OnTextChanged", function(self)
+    local query = self:GetText() or ""
+    if query ~= library.lastQuery then
+        library.lastQuery = query
+        rebuild()
+    end
 end)
 
 -- Playback Controls
@@ -1051,8 +931,6 @@ local function stop()
     retryTrack, retryPosition, playbackStatus = nil, nil, nil
     stopHandle()
     StopMusic()
-    timing:SetText("Stopped")
-    progress:SetValue(0)
     refresh()
 end
 
@@ -1078,7 +956,6 @@ local function playbackFailure(index, position, status)
     stop()
     retryTrack, retryPosition, playbackStatus = index, position, status
     local help = failureNotice.help[status] or status
-    timing:SetText(help)
     refresh()
     trace(status .. " track=" .. tostring(index))
     if status ~= failureNotice.last or GetTime() - failureNotice.time > 30 then
@@ -1203,23 +1080,6 @@ local function playSelected()
     play(retryTrack or current or selected)
 end
 
-classicWidget(button(library, "Previous", 16, -619, 88, function()
-    advance(-1, false)
-end))
-classicWidget(button(library, "Play", 110, -619, 70, function()
-    playSelected()
-end))
-classicWidget(button(library, "Stop", 186, -619, 70, stop))
-classicWidget(button(library, "Next", 262, -619, 70, function()
-    advance(1, false)
-end))
-local shuffle = classicWidget(button(library, "Shuffle: Off", 338, -619, 120, function()
-    togglePlaybackSetting("shuffle", "main")
-end))
-local repeatButton = classicWidget(button(library, "Repeat: Off", 464, -619, 130, function()
-    togglePlaybackSetting("repeatTrack", "main")
-end))
-
 sync = function()
     local game = current and sourceOf(current) == "game"
     local shuffleText = db and db.shuffle and "Shuffle: On" or "Shuffle: Off"
@@ -1241,97 +1101,28 @@ sync = function()
             repeatControl:Enable()
         end
     end
-    apply(shuffle, repeatButton)
     if menuShuffle and menuRepeat then
         apply(menuShuffle, menuRepeat)
     end
 end
 
--- Volume Slider
-
-local volumeLabel = classicWidget(font(f, "GameFontNormalSmall", 18, -668, 160))
-local volume = classicWidget(CreateFrame("Slider", nil, f, "OptionsSliderTemplate"))
-volume:SetPoint("TOPLEFT", 180, -666)
-volume:SetSize(210, 16)
-volume:SetMinMaxValues(0, 100)
-volume:SetValueStep(1)
-if volume.SetObeyStepOnDrag then
-    volume:SetObeyStepOnDrag(true)
-end
-local updatingVolume = false
+-- Volume
 
 syncVolume = function()
-    updatingVolume = true
-    local actual = musicVolume() * 100
-    local displayed = sliderPercent(actual)
-    volume:SetValue(displayed == MIN_VOLUME_PERCENT and 0 or displayed)
-    if actual <= 0 then
-        volumeLabel:SetText("Music volume: 0% (external)")
-    elseif actual < MIN_VOLUME_PERCENT then
-        volumeLabel:SetText("Music volume: <0.1%")
-    else
-        volumeLabel:SetText("Music volume: " .. percentText(actual) .. "%")
-    end
-    updatingVolume = false
     if maliSyncVolume then
         maliSyncVolume()
     end
 end
 
-volume:SetScript("OnValueChanged", function(self, value)
-    if not updatingVolume then
-        setMusicVolumePercent(value)
-    end
-end)
-volume:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Music volume")
-    GameTooltip:AddLine("0.1% minimum, then 1%-100% in whole steps. Use Stop for silence.", 1, 1, 1, true)
-    GameTooltip:AddLine("Changing volume does not restart the track.", 1, 1, 1, true)
-    GameTooltip:Show()
-end)
-volume:SetScript("OnLeave", function()
-    GameTooltip:Hide()
-end)
-volume:SetScript("OnHide", function()
-    GameTooltip:Hide()
-end)
-
 -- Music Setting
 
-local musicToggle
-
 local function syncMusicToggle()
-    if musicToggle then
-        local on = GetCVar("Sound_EnableMusic") == "1"
-        musicToggle:SetText(on and "Music: On" or "Music: Off")
-        style.SetButtonDanger(musicToggle, not on)
-    end
     updateCompactStatus()
     if maliUpdate then
         maliUpdate()
     end
 end
 
-musicToggle = classicWidget(button(f, "Music: Off", 400, -665, 94, function()
-    local enabled = GetCVar("Sound_EnableMusic") == "1"
-    SetCVar("Sound_EnableMusic", enabled and "0" or "1")
-    syncMusicToggle()
-end))
-musicToggle:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Enable / disable music")
-    GameTooltip:AddLine("Changes WoW's Music setting directly. No keyboard shortcut required.", 1, 1, 1, true)
-    GameTooltip:AddLine("Enable music here, then press Play to listen to your tracks.", 1, 1, 1, true)
-    GameTooltip:AddLine("Does not change your volume or start / restart a track.", 1, 1, 1, true)
-    GameTooltip:Show()
-end)
-musicToggle:SetScript("OnLeave", function()
-    GameTooltip:Hide()
-end)
-musicToggle:SetScript("OnHide", function()
-    GameTooltip:Hide()
-end)
 f:SetScript("OnShow", function()
     sync()
     syncVolume()
@@ -1341,6 +1132,7 @@ end)
 -- Player Modes
 
 setCompact = function(enabled)
+    compact.mmpPreview = nil
     if db then
         db.compactMode = enabled
     end
@@ -1356,6 +1148,7 @@ setCompact = function(enabled)
 end
 
 f:HookScript("OnHide", function()
+    compact.mmpPreview = nil
     if db and db.compactOnClose then
         db.compactMode = true
         applyOpacity()
@@ -1363,6 +1156,25 @@ f:HookScript("OnHide", function()
         compact:Show()
     else
         compact:Hide()
+    end
+end)
+
+-- While Settings or Flavor is open, show the compact player as a live preview.
+f.onTabShown = function(which)
+    local previewing = (which == "settings" or which == "flavor") and f:IsShown()
+    if previewing and not compact:IsShown() then
+        compact.mmpPreview = true
+        applyOpacity()
+        updateCompactStatus()
+        compact:Show()
+    elseif not previewing and compact.mmpPreview then
+        compact.mmpPreview = nil
+        compact:Hide()
+    end
+end
+f:HookScript("OnShow", function()
+    if currentTab then
+        f.onTabShown(currentTab)
     end
 end)
 
@@ -1379,25 +1191,6 @@ togglePlayer = function()
     end
 end
 
-classicWidget(button(f, "Compact", 500, -665, 92, function()
-    setCompact(true)
-end))
-
-local expandButton = classicWidget(iconButton(179, -4, "Interface/Buttons/UI-PlusButton-UP", "Open full player", function()
-    showTab("library")
-    setCompact(false)
-end))
-local playButton = classicWidget(iconButton(154, -29, "PLAY", nil, function()
-    playSelected()
-end))
-local previousButton = classicWidget(iconButton(128, -29, "Interface/Buttons/UI-SpellbookIcon-PrevPage-Up", nil, function()
-    advance(-1, false)
-end))
-local stopButton = classicWidget(iconButton(154, -29, nil, nil, stop))
-local nextButton = classicWidget(iconButton(180, -29, "Interface/Buttons/UI-SpellbookIcon-NextPage-Up", nil, function()
-    advance(1, false)
-end))
-
 -- Compact Dimensions
 
 local function compactWidth(value)
@@ -1409,28 +1202,40 @@ local function applyCompactWidth(value)
     compact:SetWidth(width)
     titleViewport:SetWidth(width - 48)
     compactTime:SetWidth(width - 120)
-    expandButton:ClearAllPoints()
-    expandButton:SetPoint("TOPRIGHT", compact, "TOPRIGHT", -8, -4)
-    playButton:ClearAllPoints()
-    playButton:SetPoint("TOPRIGHT", compact, "TOPRIGHT", -37, -29)
-    previousButton:ClearAllPoints()
-    previousButton:SetPoint("TOPRIGHT", compact, "TOPRIGHT", -89, -29)
-    stopButton:ClearAllPoints()
-    stopButton:SetPoint("TOPRIGHT", compact, "TOPRIGHT", -63, -29)
-    nextButton:ClearAllPoints()
-    nextButton:SetPoint("TOPRIGHT", compact, "TOPRIGHT", -11, -29)
     resetMarquee()
 end
 
--- Appearance Settings
+-- Settings
 
-font(settings, "GameFontNormal", 20, -147, 555):SetText("Compact appearance")
+local function section(caption, y)
+    font(settings, "GameFontNormal", 20, y, 555):SetText(caption)
+    style.Divider(settings, y - 18, 20, 540)
+end
+
+local function flatSlider(slider)
+    for _, key in ipairs({ "Low", "High", "Text" }) do
+        if type(slider[key]) == "table" then
+            slider[key]:SetText("")
+        end
+    end
+    return style.Slider(slider)
+end
+
+local function checkbox(y, caption, onClick)
+    local check = CreateFrame("CheckButton", nil, settings, "UICheckButtonTemplate")
+    check:SetPoint("TOPLEFT", 20, y)
+    check:SetSize(24, 24)
+    check:SetScript("OnClick", onClick)
+    font(settings, "GameFontHighlightSmall", 50, y - 7, 270):SetText(caption)
+    return style.Check(check)
+end
+
 local opacityInitializing = false
 
 local function opacityControl(y, caption, key, minimum)
     local captionText = font(settings, "GameFontHighlightSmall", 24, y, 240)
     local slider = CreateFrame("Slider", nil, settings, "OptionsSliderTemplate")
-    slider:SetPoint("TOPLEFT", 280, y)
+    slider:SetPoint("TOPLEFT", 280, y + 1)
     slider:SetSize(270, 16)
     slider:SetMinMaxValues(minimum, 100)
     slider:SetValueStep(1)
@@ -1445,16 +1250,17 @@ local function opacityControl(y, caption, key, minimum)
         end
         applyOpacity()
     end)
-    return slider
+    return flatSlider(slider)
 end
 
-local backgroundSlider = opacityControl(-174, "Background opacity", "compactBackground", 0)
-local textSlider = opacityControl(-204, "Text opacity", "compactTextOpacity", 20)
+section("Compact player", -147)
+local backgroundSlider = opacityControl(-178, "Background opacity", "compactBackground", 0)
+local textSlider = opacityControl(-206, "Text opacity", "compactTextOpacity", 20)
 local buttonSlider = opacityControl(-234, "Button opacity", "compactButtonOpacity", 20)
-font(settings, "GameFontDisableSmall", 24, -264, 550):SetText(
+font(settings, "GameFontDisableSmall", 24, -256, 550):SetText(
     "Hover a compact button to brighten it and the title / timer to 100%."
 )
-font(settings, "GameFontHighlightSmall", 24, -285, 240):SetText("Title scrolling")
+font(settings, "GameFontHighlightSmall", 24, -287, 240):SetText("Title scrolling")
 local scrollModeButton
 
 local function syncScrollMode()
@@ -1463,7 +1269,7 @@ local function syncScrollMode()
         or (mode == "bounce" and "Back-and-forth" or "Continuous loop"))
 end
 
-scrollModeButton = button(settings, "Continuous loop", 280, -280, 270, function()
+scrollModeButton = button(settings, "Continuous loop", 280, -281, 270, function()
     if not db then
         return
     end
@@ -1472,60 +1278,9 @@ scrollModeButton = button(settings, "Continuous loop", 280, -280, 270, function(
     syncScrollMode()
     resetMarquee()
 end)
-font(settings, "GameFontDisableSmall", 24, -310, 550):SetText(
-    "Click to cycle: continuous / back-and-forth / stationary. Choice is saved."
-)
+font(settings, "GameFontDisableSmall", 280, -309, 270):SetText("Click to cycle. Your choice is saved.")
 
-local widthLabel = font(settings, "GameFontHighlightSmall", 24, -338, 240)
-local widthSlider = CreateFrame("Slider", nil, settings, "OptionsSliderTemplate")
-widthSlider:SetPoint("TOPLEFT", 280, -336)
-widthSlider:SetSize(270, 16)
-widthSlider:SetMinMaxValues(180, 360)
-widthSlider:SetValueStep(1)
-if widthSlider.SetObeyStepOnDrag then
-    widthSlider:SetObeyStepOnDrag(true)
-end
-widthSlider:SetScript("OnValueChanged", function(self, value)
-    local width = compactWidth(value)
-    widthLabel:SetText("Compact width: " .. width .. " px")
-    if db and not opacityInitializing then
-        db.compactWidth = width
-    end
-    applyCompactWidth(width)
-end)
-local widthNote = font(settings, "GameFontDisableSmall", 24, -363, 550)
-widthNote:SetText(
-    "180-360 px. Default: 250 px. Width updates immediately and is saved."
-)
-
-local fullOpacityLabel = font(settings, "GameFontHighlightSmall", 24, -390, 240)
-local fullOpacitySlider = CreateFrame("Slider", nil, settings, "OptionsSliderTemplate")
-fullOpacitySlider:SetPoint("TOPLEFT", 280, -388)
-fullOpacitySlider:SetSize(270, 16)
-fullOpacitySlider:SetMinMaxValues(33, 100)
-fullOpacitySlider:SetValueStep(1)
-if fullOpacitySlider.SetObeyStepOnDrag then
-    fullOpacitySlider:SetObeyStepOnDrag(true)
-end
-fullOpacitySlider:SetScript("OnValueChanged", function(self, value)
-    local alpha = opacity(math.floor(value + 0.5) / 100, 0.33, 1)
-    fullOpacityLabel:SetText("Full player opacity: " .. math.floor(alpha * 100 + 0.5) .. "%")
-    if db and not opacityInitializing then
-        db.fullPlayerOpacity = alpha
-    end
-    f:SetAlpha(alpha)
-end)
-font(settings, "GameFontDisableSmall", 232, -414, 330):SetText(
-    "Full player opacity: 33-100%; compact is separate."
-)
-
--- Compact Display Settings
-
-local titleTooltipCheck = CreateFrame("CheckButton", nil, settings, "UICheckButtonTemplate")
-titleTooltipCheck:SetPoint("TOPLEFT", 22, -430)
-titleTooltipCheck:SetSize(24, 24)
-font(settings, "GameFontHighlightSmall", 50, -437, 260):SetText("Show compact title tooltip")
-titleTooltipCheck:SetScript("OnClick", function(self)
+local titleTooltipCheck = checkbox(-330, "Show title tooltip", function(self)
     if not db then
         return
     end
@@ -1534,8 +1289,14 @@ titleTooltipCheck:SetScript("OnClick", function(self)
         hideTitleTooltip()
     end
 end)
-
-button(settings, "Reset Compact Position", 330, -430, 220, function()
+local elapsedOnlyCheck = checkbox(-356, "Show elapsed time only", function(self)
+    if not db then
+        return
+    end
+    db.compactElapsedOnly = self:GetChecked() and true or false
+    updateCompactStatus()
+end)
+button(settings, "Reset Position", 280, -330, 270, function()
     finishCompactMove()
     hideTitleTooltip()
     compact:ClearAllPoints()
@@ -1545,109 +1306,49 @@ button(settings, "Reset Compact Position", 330, -430, 220, function()
     end
 end)
 
-local elapsedOnlyCheck = CreateFrame("CheckButton", nil, settings, "UICheckButtonTemplate")
-elapsedOnlyCheck:SetPoint("TOPLEFT", 22, -455)
-elapsedOnlyCheck:SetSize(24, 24)
-font(settings, "GameFontHighlightSmall", 50, -462, 500):SetText("Elapsed time only in compact display")
-elapsedOnlyCheck:SetScript("OnClick", function(self)
-    if not db then
-        return
+section("Full player", -396)
+local fullOpacityLabel = font(settings, "GameFontHighlightSmall", 24, -427, 240)
+local fullOpacitySlider = CreateFrame("Slider", nil, settings, "OptionsSliderTemplate")
+fullOpacitySlider:SetPoint("TOPLEFT", 280, -426)
+fullOpacitySlider:SetSize(270, 16)
+fullOpacitySlider:SetMinMaxValues(33, 100)
+fullOpacitySlider:SetValueStep(1)
+if fullOpacitySlider.SetObeyStepOnDrag then
+    fullOpacitySlider:SetObeyStepOnDrag(true)
+end
+fullOpacitySlider:SetScript("OnValueChanged", function(self, value)
+    local alpha = opacity(math.floor(value + 0.5) / 100, 0.33, 1)
+    fullOpacityLabel:SetText("Opacity: " .. math.floor(alpha * 100 + 0.5) .. "%")
+    if db and not opacityInitializing then
+        db.fullPlayerOpacity = alpha
     end
-    db.compactElapsedOnly = self:GetChecked() and true or false
-    updateCompactStatus()
+    f:SetAlpha(alpha)
+end)
+flatSlider(fullOpacitySlider)
+local compactOnCloseCheck = checkbox(-450, "Switch to compact when closing", function(self)
+    if db then
+        db.compactOnClose = self:GetChecked() and true or false
+    end
 end)
 
--- Background Audio
-
-local backgroundAudioCheck = CreateFrame("CheckButton", nil, settings, "UICheckButtonTemplate")
-backgroundAudioCheck:SetPoint("TOPLEFT", 22, -480)
-backgroundAudioCheck:SetSize(24, 24)
-font(settings, "GameFontHighlightSmall", 50, -487, 500):SetText("Allow music in background *")
-local backgroundAudioNote = font(settings, "GameFontDisableSmall", 50, -507, 505)
+section("Sound", -490)
+local syncBackgroundAudio
+local backgroundAudioCheck = checkbox(-521, "Allow music in background *", function(self)
+    SetCVar("Sound_EnableSoundWhenGameIsInBG", self:GetChecked() and "1" or "0")
+    syncBackgroundAudio()
+end)
+local backgroundAudioNote = font(settings, "GameFontDisableSmall", 50, -548, 505)
 backgroundAudioNote:SetWordWrap(true)
 backgroundAudioNote:SetText(
     "* Recommended to prevent MP3 interruptions when switching away from WoW. "
         .. "Changes WoW's Sound in Background setting for all game audio."
 )
 
-local function syncBackgroundAudio()
+syncBackgroundAudio = function()
     backgroundAudioCheck:SetChecked(GetCVar("Sound_EnableSoundWhenGameIsInBG") == "1")
 end
-
-backgroundAudioCheck:SetScript("OnClick", function(self)
-    SetCVar("Sound_EnableSoundWhenGameIsInBG", self:GetChecked() and "1" or "0")
-    syncBackgroundAudio()
-end)
 settings:HookScript("OnShow", syncBackgroundAudio)
 
--- Close Behavior
-
-local compactOnCloseCheck = CreateFrame("CheckButton", nil, settings, "UICheckButtonTemplate")
-compactOnCloseCheck:SetPoint("TOPLEFT", 22, -538)
-compactOnCloseCheck:SetSize(24, 24)
-font(settings, "GameFontHighlightSmall", 50, -545, 500):SetText(
-    "Switch to compact when closing the main player"
-)
-compactOnCloseCheck:SetScript("OnClick", function(self)
-    if db then
-        db.compactOnClose = self:GetChecked() and true or false
-    end
-end)
-
--- About
-
-font(settings, "GameFontNormal", 20, -565, 555):SetText("About")
-font(settings, "GameFontHighlightSmall", 24, -583, 555):SetText(
-    "MaliMusicPlayer v" .. VERSION .. " - By Mali Gnosis, for Mali Gnosis."
-)
-local quote = font(settings, "GameFontHighlightSmall", 24, -600, 555)
-quote:SetWordWrap(false)
-quote:SetText('"If I throw a dog a bone, I don\'t want to know if it tastes good or not." - Brick Top')
-local quoteFont = quote:GetFont()
-for size = 11, 8, -0.5 do
-    quote:SetFont(quoteFont, size, "")
-    if quote:GetStringWidth() <= 555 then
-        break
-    end
-end
-font(settings, "GameFontDisableSmall", 24, -618, 555):SetText(
-    "Released under the MIT License. See LICENSE.MD for details."
-)
-font(settings, "GameFontHighlightSmall", 24, -645, 55):SetText("GitHub:")
-
-local repositoryURL = "https://github.com/ZiRRuSH/MMP"
-local repository = CreateFrame("EditBox", nil, settings, "InputBoxTemplate")
-repository:SetPoint("TOPLEFT", 86, -639)
-repository:SetSize(475, 22)
-repository:SetAutoFocus(false)
-repository:SetMaxLetters(200)
-repository:SetText(repositoryURL)
-repository:SetCursorPosition(0)
-local restoringRepository = false
-repository:SetScript("OnTextChanged", function(self)
-    if restoringRepository or self:GetText() == repositoryURL then
-        return
-    end
-    restoringRepository = true
-    self:SetText(repositoryURL)
-    self:SetCursorPosition(0)
-    restoringRepository = false
-end)
-repository:SetScript("OnEditFocusGained", function(self)
-    self:HighlightText()
-end)
-repository:SetScript("OnEditFocusLost", function(self)
-    self:HighlightText(0, 0)
-end)
-repository:SetScript("OnEscapePressed", function(self)
-    self:ClearFocus()
-end)
-repository:SetScript("OnEnterPressed", function(self)
-    self:ClearFocus()
-end)
-repository:SetScript("OnHide", function(self)
-    self:ClearFocus()
-end)
 showTab("library")
 
 -- Help
@@ -1700,108 +1401,187 @@ helpPause:SetText(
         .. "not a missing player feature."
 )
 
--- Flavor
+-- Flavor (own scope: keeps the main chunk under the 200-local limit)
 
-font(flavor, "GameFontNormal", 20, -147, 555):SetText("UI style")
-local styleButtons = {}
+do
 local syncFlavor
+font(flavor, "GameFontNormal", 20, -147, 555):SetText("Colors")
+local profileDropdown = style.Dropdown(flavor, 250)
+profileDropdown:SetPoint("TOPLEFT", 24, -168)
 
-local function styleChoice(name, caption, x)
-    local control = button(flavor, caption, x, -168, 150, function()
-        style.SetStyle(name)
-        syncFlavor()
-    end)
-    styleButtons[name] = control
+-- Saving swaps the dropdown for a name box in the same spot.
+local nameBox = CreateFrame("EditBox", nil, flavor, "InputBoxTemplate")
+nameBox:SetPoint("TOPLEFT", 28, -168)
+nameBox:SetSize(246, 24)
+nameBox:SetAutoFocus(false)
+nameBox:SetMaxLetters(32)
+style.EditBox(nameBox, "Name this profile")
+nameBox:Hide()
+
+local saveButton, cancelSave
+local function setSaving(saving)
+    profileDropdown:Close()
+    profileDropdown:SetShown(not saving)
+    nameBox:SetShown(saving)
+    cancelSave:SetShown(saving)
+    saveButton:SetText(saving and "Save" or "Save as...")
+    if saving then
+        nameBox:SetText("")
+        nameBox:SetFocus()
+    else
+        nameBox:ClearFocus()
+    end
+end
+local function saveProfile()
+    if not nameBox:IsShown() then
+        setSaving(true)
+        return
+    end
+    local name = strtrim(nameBox:GetText() or "")
+    if name == "" then
+        return
+    end
+    local replacing = style.Profile(name) ~= nil
+    style.SaveProfile(name)
+    setSaving(false)
+    say((replacing and "Updated" or "Saved") .. " color profile \"" .. safe(name) .. "\".")
+    syncFlavor()
+end
+saveButton = button(flavor, "Save as...", 282, -168, 90, saveProfile)
+cancelSave = style.IconButton(flavor, "close", 24, 12)
+cancelSave:SetPoint("LEFT", saveButton, "RIGHT", 6, 0)
+cancelSave:SetScript("OnClick", function() setSaving(false) end)
+cancelSave:Hide()
+nameBox:SetScript("OnEnterPressed", saveProfile)
+nameBox:SetScript("OnEscapePressed", function() setSaving(false) end)
+
+-- One list: built-in presets, then your saved profiles (deletable).
+profileDropdown.getItems = function()
+    local items = { { header = "Presets" } }
+    for _, preset in ipairs(style.presets) do
+        items[#items + 1] = { text = preset.name, colors = preset.colors, current = style.ColorsMatch(preset.colors) }
+    end
+    items[#items + 1] = { header = "Your profiles" }
+    local names = style.ProfileNames()
+    for _, name in ipairs(names) do
+        local colors = style.Profile(name)
+        items[#items + 1] = { text = name, profile = name, colors = colors, deletable = true,
+            current = style.ColorsMatch(colors) }
+    end
+    if #names == 0 then
+        items[#items + 1] = { text = "None saved yet. Use Save as...", inert = true }
+    end
+    return items
+end
+profileDropdown.onSelect = function(item)
+    if item.profile then
+        style.LoadProfile(item.profile)
+    else
+        style.UseColors(item.colors)
+    end
+    syncFlavor()
+end
+local function deleteProfile(name)
+    style.DeleteProfile(name)
+    say("Deleted color profile \"" .. safe(name) .. "\".")
+    syncFlavor()
+end
+if StaticPopupDialogs then
+    StaticPopupDialogs.MALIMUSICPLAYER_DELETE_PROFILE = {
+        text = "Delete color profile \"%s\"?\nThis can't be undone.",
+        button1 = DELETE or "Delete",
+        button2 = CANCEL or "Cancel",
+        OnAccept = function(_, name)
+            if name then
+                deleteProfile(name)
+            end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        enterClicksFirstButton = true,
+        preferredIndex = 3,
+    }
+end
+profileDropdown.onDelete = function(item)
+    if not item.profile then
+        return
+    end
+    profileDropdown:Close()
+    if StaticPopup_Show and StaticPopupDialogs and StaticPopupDialogs.MALIMUSICPLAYER_DELETE_PROFILE then
+        StaticPopup_Show("MALIMUSICPLAYER_DELETE_PROFILE", safe(item.profile), nil, item.profile)
+    else
+        deleteProfile(item.profile)
+    end
 end
 
-styleChoice("mali", "Mali Style", 24)
-styleChoice("classic", "Classic", 184)
-font(flavor, "GameFontDisableSmall", 24, -200, 550):SetText(
-    "Mali Style is a flat, dark look shared with MaliFishing. Classic is the standard Blizzard look."
-)
-
-font(flavor, "GameFontNormal", 20, -228, 555):SetText("Mali Style font")
-local fontButtons = {}
-for index, choice in ipairs({ { "inter", "Inter" }, { "game", "WoW font" } }) do
-    fontButtons[choice[1]] = button(flavor, choice[2], 24 + (index - 1) * 160, -249, 150, function()
-        style.SetFontChoice(choice[1])
-        syncFlavor()
-    end)
-end
-font(flavor, "GameFontDisableSmall", 24, -281, 550):SetText(
-    "Inter is a clean font bundled with the add-on. WoW font matches the rest of your interface."
-)
-
-font(flavor, "GameFontNormal", 20, -309, 555):SetText("Mali Style colors")
-local colorNote = font(flavor, "GameFontDisableSmall", 24, -329, 550)
+local colorNote = font(flavor, "GameFontDisableSmall", 24, -202, 550)
 local swatches = {}
 
 for index, entry in ipairs(style.colorNames) do
-    local y = -351 - (index - 1) * 30
-    local swatch = CreateFrame("Button", nil, flavor)
-    swatch:SetPoint("TOPLEFT", 26, y)
-    swatch:SetSize(22, 22)
-    local edge = swatch:CreateTexture(nil, "BACKGROUND")
-    edge:SetAllPoints()
-    edge:SetColorTexture(0.7, 0.7, 0.7, 1)
-    swatch.color = swatch:CreateTexture(nil, "ARTWORK")
-    swatch.color:SetPoint("TOPLEFT", 2, -2)
-    swatch.color:SetPoint("BOTTOMRIGHT", -2, 2)
-    local highlight = swatch:CreateTexture(nil, "HIGHLIGHT")
-    highlight:SetAllPoints()
-    highlight:SetColorTexture(1, 1, 1, 0.2)
-    swatch.label = font(flavor, "GameFontHighlightSmall", 58, y - 5, 400)
+    local column, line = (index - 1) % 2, math.floor((index - 1) / 2)
+    local x, y = 26 + column * 270, -224 - line * 30
+    local swatch = style.Swatch(flavor, 22)
+    swatch:SetPoint("TOPLEFT", x, y)
+    swatch.label = font(flavor, "GameFontHighlightSmall", x + 32, y - 5, 230)
     swatch.label:SetText(entry.label)
     swatch:SetScript("OnClick", function()
-        if not style.IsMali() then
-            return
-        end
         if not style.PickColor(entry.key, function() syncFlavor() end) then
             say("The color picker is not available on this client.")
         end
     end)
-    swatch:SetScript("OnEnter", function(self)
+    swatch:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(entry.label)
-        GameTooltip:AddLine(style.IsMali() and "Click to choose a color." or "Switch to Mali Style to change colors.",
-            1, 1, 1, true)
+        GameTooltip:AddLine("Click to choose a color.", 1, 1, 1, true)
         GameTooltip:Show()
     end)
-    swatch:SetScript("OnLeave", function()
+    swatch:HookScript("OnLeave", function()
         GameTooltip:Hide()
     end)
     swatch.key = entry.key
     swatches[#swatches + 1] = swatch
 end
 
-local restoreColors = button(flavor, "Restore default colors", 24, -351 - #swatches * 30 - 6, 200, function()
+button(flavor, "Restore default colors", 24, -324, 200, function()
     style.RestoreColors()
     syncFlavor()
-    say("Mali Style colors restored to the defaults.")
+    say("Colors restored to the default, Soulstone.")
 end)
 
+-- Name of the preset or profile the current colors match, if any.
+local function currentProfileName()
+    for _, name in ipairs(style.ProfileNames()) do
+        if style.ColorsMatch(style.Profile(name)) then
+            return name
+        end
+    end
+    for _, preset in ipairs(style.presets) do
+        if style.ColorsMatch(preset.colors) then
+            return preset.name
+        end
+    end
+    return "Custom colors"
+end
+
 syncFlavor = function()
-    local mali = style.IsMali()
-    for name, control in pairs(styleButtons) do
-        style.SetButtonActive(control, (name == "mali") == mali)
-    end
-    for name, control in pairs(fontButtons) do
-        style.SetButtonActive(control, mali and name == style.FontChoice())
-        control:SetEnabled(mali)
-    end
+    profileDropdown:SetValue(currentProfileName(), style.CurrentColors())
+    profileDropdown:Refresh()
     for _, swatch in ipairs(swatches) do
         local color = style.Color(swatch.key)
-        swatch.color:SetColorTexture(color[1], color[2], color[3], 1)
-        swatch:SetAlpha(mali and 1 or 0.35)
-        swatch.label:SetAlpha(mali and 1 or 0.35)
+        swatch:SetColor(color[1], color[2], color[3])
     end
-    restoreColors:SetEnabled(mali)
-    colorNote:SetText(mali and "Click a swatch to change it. Changes show right away and are saved."
-        or "These apply to Mali Style. Switch to Mali Style to edit them.")
+    colorNote:SetText("Pick a preset or profile above, or click a swatch to change one color.")
 end
 flavor:SetScript("OnShow", function()
     syncFlavor()
 end)
+flavor:HookScript("OnHide", function()
+    if nameBox:IsShown() then
+        setSaving(false)
+    end
+end)
+end
 
 style.OnApply(function()
     applyOpacity()
@@ -1812,38 +1592,71 @@ end)
 
 do
 local ui = {}
-local function maliWidget(widget)
-    maliOnly[#maliOnly + 1] = widget
-    return widget
-end
 
 local function maliText(parent, size, weight, template)
-    return maliWidget(style.Font(parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight"), size, weight))
+    return style.Font(parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight"), size, weight)
+end
+
+-- Shuffle and Repeat: a flat button with an icon and a label; the icon lights up when on.
+local function toggleButton(iconName, caption, width)
+    local toggle = CreateFrame("Button", nil, f)
+    toggle:SetSize(width, 24)
+    toggle.icon = toggle:CreateTexture(nil, "ARTWORK")
+    toggle.icon:SetPoint("LEFT", 8, 0)
+    toggle.icon:SetSize(14, 14)
+    toggle.icon:SetTexture(style.Icon(iconName))
+    toggle.label = maliText(toggle, 11, "regular", "GameFontHighlightSmall")
+    toggle.label:SetPoint("LEFT", toggle.icon, "RIGHT", 6, 0)
+    toggle.label:SetText(caption)
+    style.Button(toggle)
+    local function paint(self)
+        local color = { 0.9, 0.88, 0.84 }
+        if not self:IsEnabled() then
+            color = { 0.4, 0.39, 0.42 }
+        elseif self.hovered then
+            color = { 1, 0.97, 0.9 }
+        end
+        self.label:SetTextColor(color[1], color[2], color[3])
+        local icon = self.on and self:IsEnabled() and style.Color("accent") or color
+        self.icon:SetVertexColor(icon[1], icon[2], icon[3])
+    end
+    toggle:HookScript("OnEnter", function(self) self.hovered = true paint(self) end)
+    toggle:HookScript("OnLeave", function(self) self.hovered = false paint(self) end)
+    toggle:HookScript("OnEnable", paint)
+    toggle:HookScript("OnDisable", paint)
+    function toggle:SetOn(on)
+        self.on = on and true or false
+        style.SetButtonActive(self, self.on)
+        paint(self)
+    end
+    style.OnApply(function() paint(toggle) end)
+    paint(toggle)
+    return toggle
 end
 
 local function maliLine(parent, y)
-    local line = maliWidget(parent:CreateTexture(nil, "ARTWORK"))
+    local line = parent:CreateTexture(nil, "ARTWORK")
     line:SetPoint("TOPLEFT", 1, y)
     line:SetPoint("TOPRIGHT", -1, y)
     line:SetHeight(1)
     return line
 end
 
-local MALI_HEIGHT, CLASSIC_HEIGHT = 724, 700
+local MALI_HEIGHT = 724
 ui.dividers = { maliLine(f, -36), maliLine(f, -98) }
-ui.bottomLine = maliWidget(f:CreateTexture(nil, "ARTWORK"))
+ui.bottomLine = f:CreateTexture(nil, "ARTWORK")
 ui.bottomLine:SetPoint("BOTTOMLEFT", 1, 52)
 ui.bottomLine:SetPoint("BOTTOMRIGHT", -1, 52)
 ui.bottomLine:SetHeight(1)
 ui.dividers[#ui.dividers + 1] = ui.bottomLine
 
 -- Header: title (already made with the panel), compact and close icons.
-ui.headerClose = maliWidget(style.IconButton(f, "close", 22, 14))
+ui.headerClose = style.IconButton(f, "close", 22, 14)
 ui.headerClose:SetPoint("TOPRIGHT", -8, -7)
 ui.headerClose:SetScript("OnClick", function()
     f:Hide()
 end)
-ui.headerCompact = maliWidget(style.IconButton(f, "compact", 22, 14))
+ui.headerCompact = style.IconButton(f, "compact", 22, 14)
 ui.headerCompact:SetPoint("RIGHT", ui.headerClose, "LEFT", -4, 0)
 ui.headerCompact:SetScript("OnClick", function()
     setCompact(true)
@@ -1860,7 +1673,7 @@ for _, control in ipairs({ { ui.headerCompact, "Compact player" }, { ui.headerCl
 end
 
 -- Now playing: ui.badge, place path, title, elapsed / progress / total.
-ui.badge = maliWidget(CreateFrame("Frame", nil, f))
+ui.badge = CreateFrame("Frame", nil, f)
 ui.badge:SetPoint("TOPLEFT", 14, -46)
 ui.badge:SetSize(42, 42)
 ui.badgeEdges = {}
@@ -1875,7 +1688,7 @@ end
 ui.badgeIcon = ui.badge:CreateTexture(nil, "ARTWORK")
 ui.badgeIcon:SetPoint("CENTER")
 ui.badgeIcon:SetSize(22, 22)
-ui.badgeIcon:SetTexture(style.MEDIA .. "icons\\music")
+ui.badgeIcon:SetTexture(style.Icon("music"))
 
 ui.nowPath = maliText(f, 11)
 ui.nowPath:SetPoint("TOPLEFT", 68, -46)
@@ -1895,7 +1708,7 @@ ui.nowTotal = maliText(f, 11)
 ui.nowTotal:SetPoint("TOPRIGHT", -16, -81)
 ui.nowTotal:SetWidth(52)
 ui.nowTotal:SetJustifyH("RIGHT")
-ui.nowBar = maliWidget(CreateFrame("StatusBar", nil, f))
+ui.nowBar = CreateFrame("StatusBar", nil, f)
 ui.nowBar:SetPoint("LEFT", ui.nowElapsed, "RIGHT", 4, 0)
 ui.nowBar:SetPoint("RIGHT", ui.nowTotal, "LEFT", -6, 0)
 ui.nowBar:SetHeight(3)
@@ -1905,13 +1718,13 @@ ui.nowBarBack = ui.nowBar:CreateTexture(nil, "BACKGROUND")
 ui.nowBarBack:SetAllPoints()
 
 -- Transport bar.
-ui.barPrevious = maliWidget(style.IconButton(f, "prev", 30, 16))
+ui.barPrevious = style.IconButton(f, "prev", 30, 16)
 ui.barPrevious:SetPoint("BOTTOMLEFT", 14, 11)
 ui.barPrevious:SetScript("OnClick", function()
     advance(-1, false)
 end)
-ui.barPlay = maliWidget(style.IconButton(f, "play", 36, 18))
-ui.barPlay.mmpEmphasis = true
+ui.barPlay = style.IconButton(f, "play", 36, 18)
+style.SetIconActive(ui.barPlay, true)
 ui.barPlay:SetPoint("LEFT", ui.barPrevious, "RIGHT", 4, 0)
 ui.barPlay:SetScript("OnClick", function()
     if playing then
@@ -1920,24 +1733,24 @@ ui.barPlay:SetScript("OnClick", function()
         playSelected()
     end
 end)
-ui.barNext = maliWidget(style.IconButton(f, "next", 30, 16))
+ui.barNext = style.IconButton(f, "next", 30, 16)
 ui.barNext:SetPoint("LEFT", ui.barPlay, "RIGHT", 4, 0)
 ui.barNext:SetScript("OnClick", function()
     advance(1, false)
 end)
-ui.shuffleToggle = maliWidget(style.Toggle(f, "shuffle", "Shuffle", 82))
+ui.shuffleToggle = toggleButton("shuffle", "Shuffle", 82)
 ui.shuffleToggle:SetPoint("LEFT", ui.barNext, "RIGHT", 14, 0)
 ui.shuffleToggle:SetScript("OnClick", function()
     togglePlaybackSetting("shuffle", "mali bar")
 end)
-ui.repeatToggle = maliWidget(style.Toggle(f, "repeat", "Repeat", 80))
+ui.repeatToggle = toggleButton("repeat", "Repeat", 80)
 ui.repeatToggle:SetPoint("LEFT", ui.shuffleToggle, "RIGHT", 6, 0)
 ui.repeatToggle:SetScript("OnClick", function()
     togglePlaybackSetting("repeatTrack", "mali bar")
 end)
 
 -- Volume: ui.speaker mutes / unmutes music; ui.slim slider sets music volume.
-ui.speaker = maliWidget(style.IconButton(f, "volume", 26, 16))
+ui.speaker = style.IconButton(f, "volume", 26, 16)
 ui.speaker:SetPoint("BOTTOMRIGHT", -204, 13)
 ui.speaker:SetScript("OnClick", function()
     SetCVar("Sound_EnableMusic", GetCVar("Sound_EnableMusic") == "1" and "0" or "1")
@@ -1954,7 +1767,7 @@ end)
 ui.speaker:HookScript("OnLeave", function()
     GameTooltip:Hide()
 end)
-ui.slim = maliWidget(CreateFrame("Slider", nil, f))
+ui.slim = CreateFrame("Slider", nil, f)
 ui.slim:SetOrientation("HORIZONTAL")
 ui.slim:SetPoint("LEFT", ui.speaker, "RIGHT", 6, 0)
 ui.slim:SetSize(116, 16)
@@ -1998,20 +1811,20 @@ maliSyncVolume = function()
 end
 
 -- Compact player (Mali): expand icon, previous / play-stop / next, progress line.
-ui.compactExpand = maliWidget(style.IconButton(compact, "expand", 20, 12))
+ui.compactExpand = style.IconButton(compact, "expand", 20, 12)
 ui.compactExpand:SetPoint("TOPRIGHT", -5, -5)
 ui.compactExpand:SetScript("OnClick", function()
     showTab("library")
     setCompact(false)
 end)
 hoverHandlers(ui.compactExpand, "Open full player")
-ui.compactNext = maliWidget(style.IconButton(compact, "next", 22, 13))
+ui.compactNext = style.IconButton(compact, "next", 22, 13)
 ui.compactNext:SetPoint("BOTTOMRIGHT", -10, 7)
 ui.compactNext:SetScript("OnClick", function()
     advance(1, false)
 end)
 hoverHandlers(ui.compactNext)
-ui.compactPlay = maliWidget(style.IconButton(compact, "play", 22, 13))
+ui.compactPlay = style.IconButton(compact, "play", 22, 13)
 ui.compactPlay:SetPoint("RIGHT", ui.compactNext, "LEFT", -2, 0)
 ui.compactPlay:SetScript("OnClick", function()
     if playing then
@@ -2021,20 +1834,20 @@ ui.compactPlay:SetScript("OnClick", function()
     end
 end)
 hoverHandlers(ui.compactPlay)
-ui.compactPrevious = maliWidget(style.IconButton(compact, "prev", 22, 13))
+ui.compactPrevious = style.IconButton(compact, "prev", 22, 13)
 ui.compactPrevious:SetPoint("RIGHT", ui.compactPlay, "LEFT", -2, 0)
 ui.compactPrevious:SetScript("OnClick", function()
     advance(-1, false)
 end)
 hoverHandlers(ui.compactPrevious)
-ui.compactLine = maliWidget(CreateFrame("StatusBar", nil, compact))
+ui.compactLine = CreateFrame("StatusBar", nil, compact)
 ui.compactLine:SetPoint("BOTTOMLEFT", 1, 1)
 ui.compactLine:SetPoint("BOTTOMRIGHT", -1, 1)
 ui.compactLine:SetHeight(2)
 ui.compactLine:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
 ui.compactLine:SetMinMaxValues(0, 1)
 
--- Resizing: the main window (Mali Style) and the compact player width (both styles).
+-- Resizing: the main window and the compact player width.
 
 if f.SetResizeBounds then
     f:SetResizeBounds(600, 520, 1400, 1400)
@@ -2055,7 +1868,7 @@ local function makeGrip(parent, size)
     return grip
 end
 
-ui.fullGrip = maliWidget(makeGrip(f, 16))
+ui.fullGrip = makeGrip(f, 16)
 ui.fullGrip:SetScript("OnMouseDown", function(_, which)
     if which == "LeftButton" then
         f:StartSizing("BOTTOMRIGHT")
@@ -2094,12 +1907,6 @@ local function shiftContent(frame, dy, belowY)
     end
 end
 
--- The width slider is replaced by the compact player's own resize grip.
-widthLabel:Hide()
-widthSlider:Hide()
-widthNote:Hide()
-shiftContent(settings, 52, -365)
-
 ui.views = {}
 local function scrollTab(content, name, height)
     local view = CreateFrame("ScrollFrame", "MaliMusicPlayer" .. name .. "View", f, "UIPanelScrollFrameTemplate")
@@ -2119,23 +1926,22 @@ local function scrollTab(content, name, height)
             bar:SetShown((yRange or self:GetVerticalScrollRange() or 0) > 1)
         end
     end)
-    style.ScrollBar(bar)
+    style.Scroll(view)
     content.view = view
     ui.views[#ui.views + 1] = { view = view, content = content }
 end
-scrollTab(settings, "Settings", 480)
-scrollTab(flavor, "Flavor", 440)
+scrollTab(settings, "Settings", 450)
+scrollTab(flavor, "Flavor", 230)
 scrollTab(help, "Help", 470)
 
 layout = function()
-    local mali = style.IsMali()
     scroll:ClearAllPoints()
     scroll:SetPoint("TOPLEFT", 16, -178)
-    scroll:SetPoint("BOTTOMRIGHT", -41, mali and 60 or 90)
+    scroll:SetPoint("BOTTOMRIGHT", -41, 60)
     for _, entry in ipairs(ui.views) do
         entry.view:ClearAllPoints()
         entry.view:SetPoint("TOPLEFT", 0, -138)
-        entry.view:SetPoint("BOTTOMRIGHT", -30, mali and 58 or 40)
+        entry.view:SetPoint("BOTTOMRIGHT", -30, 58)
         entry.content:SetWidth(math.max(560, (f:GetWidth() or 610) - 40))
     end
     local height = scroll:GetHeight() or 0
@@ -2182,9 +1988,6 @@ compact:HookScript("OnSizeChanged", function(self, width)
 end)
 
 maliUpdate = function()
-    if not style.IsMali() then
-        return
-    end
     local track = current and tracks[current] or tracks[selected]
     local place = track and track.place
     local path
@@ -2200,8 +2003,8 @@ maliUpdate = function()
     if track and not playing then
         path = (current and "Stopped" or "Selected") .. (path ~= "" and "  \194\183  " .. path or "")
     end
-    ui.nowPath:SetText(path)
-    ui.nowTitle:SetText(track and safe(track.title or label(track)) or "Pick something to play")
+    style.SetText(ui.nowPath, path)
+    style.SetText(ui.nowTitle, track and safe(track.title or label(track)) or "Pick something to play")
     local duration = playing and track and gameMonitor.duration(track) or 0
     local elapsed = playing and math.max(0, GetTime() - started) or 0
     ui.nowElapsed:SetText(clock(elapsed))
@@ -2220,23 +2023,12 @@ maliUpdate = function()
     ui.repeatToggle:SetEnabled(not gameWithoutEnd)
     local musicOn = GetCVar("Sound_EnableMusic") == "1" and musicVolume() > 0
     ui.speaker:SetIcon(musicOn and "volume" or "mute")
-    ui.speaker.mmpDanger = not musicOn
-    style.IconRefresh(ui.speaker)
+    style.SetIconDanger(ui.speaker, not musicOn)
 end
 
-style.OnApply(function(mali)
-    for _, widget in ipairs(classicOnly) do
-        widget:SetShown(not mali)
-    end
-    for _, widget in ipairs(maliOnly) do
-        widget:SetShown(mali)
-    end
-    if mali then
-        local size = db and type(db.fullSize) == "table" and db.fullSize
-        f:SetSize(size and size[1] or 610, size and size[2] or MALI_HEIGHT)
-    else
-        f:SetSize(610, CLASSIC_HEIGHT)
-    end
+style.OnApply(function()
+    local size = db and type(db.fullSize) == "table" and db.fullSize
+    f:SetSize(size and size[1] or 610, size and size[2] or MALI_HEIGHT)
     layout()
     local accent, border, background = style.Color("accent"), style.Color("border"), style.Color("background")
     for _, line in ipairs(ui.dividers) do
@@ -2257,11 +2049,7 @@ style.OnApply(function(mali)
     ui.slimThumb:SetColorTexture(0.9, 0.88, 0.84, 1)
     ui.slimText:SetTextColor(0.66, 0.64, 0.7)
     ui.compactLine:SetStatusBarColor(accent[1], accent[2], accent[3])
-    if mali then
-        compactTime:SetTextColor(accent[1], accent[2], accent[3])
-    else
-        compactTime:SetTextColor(1, 0.82, 0)
-    end
+    compactTime:SetTextColor(accent[1], accent[2], accent[3])
     resetMarquee()
     if currentTab then
         showTab(currentTab)
@@ -2310,7 +2098,7 @@ end)
 menuRepeat = action(-190, "Repeat: Off", function()
     togglePlaybackSetting("repeatTrack", "quick menu")
 end)
-action(-217, "Open Settings / About", function()
+action(-217, "Open Settings", function()
     showTab("settings")
     setCompact(false)
 end)
@@ -2321,7 +2109,7 @@ local function toggleMenu()
         return
     end
     local index = current or selected
-    menuTrack:SetText(tracks[index] and safe(label(tracks[index])) or "No track selected")
+    style.SetText(menuTrack, tracks[index] and safe(label(tracks[index])) or "No track selected")
     sync()
     local x, y = GetCursorPosition()
     local scale = UIParent:GetEffectiveScale()
@@ -2724,6 +2512,20 @@ events:SetScript("OnEvent", function(self, event, name)
         MaliMusicPlayerDB = MaliMusicPlayerDB or {}
         db = MaliMusicPlayerDB
         style.Init(db)
+        db.uiStyle, db.maliFont = nil, nil
+        if not db.secondaryMigrated then
+            local sets = { db.maliColors }
+            for _, colors in pairs(db.colorProfiles) do
+                sets[#sets + 1] = colors
+            end
+            for _, colors in ipairs(sets) do
+                if type(colors) == "table" then
+                    colors.secondary = colors.secondary or colors.openPlace
+                    colors.openPlace = nil
+                end
+            end
+            db.secondaryMigrated = true
+        end
         trace("Startup: repeat=" .. tostring(db.repeatTrack) .. " shuffle=" .. tostring(db.shuffle))
         if not db.backgroundAudioDefault085 then
             db.backgroundAudioDefault085 = true
@@ -2751,7 +2553,6 @@ events:SetScript("OnEvent", function(self, event, name)
         end
         titleTooltipCheck:SetChecked(db.compactTitleTooltip and true or false)
         elapsedOnlyCheck:SetChecked(db.compactElapsedOnly and true or false)
-        restoreSelection()
         db.compactWidth = compactWidth(db.compactWidth)
         syncScrollMode()
         restorePosition(f, "position")
@@ -2765,8 +2566,6 @@ events:SetScript("OnEvent", function(self, event, name)
         backgroundSlider:SetValue(db.compactBackground * 100)
         textSlider:SetValue(db.compactTextOpacity * 100)
         buttonSlider:SetValue(db.compactButtonOpacity * 100)
-        widthSlider:SetValue(db.compactWidth)
-        widthLabel:SetText("Compact width: " .. db.compactWidth .. " px")
         fullOpacitySlider:SetValue(db.fullPlayerOpacity * 100)
         fullOpacityLabel:SetText("Full player opacity: " .. math.floor(db.fullPlayerOpacity * 100 + 0.5) .. "%")
         f:SetAlpha(db.fullPlayerOpacity)
@@ -2779,14 +2578,40 @@ events:SetScript("OnEvent", function(self, event, name)
             end
             db.gameDurations70959 = nil
         end
+    elseif event == "PLAYER_LOGIN" then
+        -- Every add-on has loaded by now, including MaliMusic with your playlist.
+        local list = MaliMusicPlayerLibrary or {}
+        local count = #list
+        if mp3Count == 0 and count > 0 then
+            for index = #tracks, 1, -1 do
+                tracks[index + count] = tracks[index]
+            end
+            for index, track in ipairs(list) do
+                tracks[index] = track
+            end
+            for _, place in ipairs(gamePlaces) do
+                place.first, place.last = place.first + count, place.last + count
+            end
+            mp3Count = count
+        end
+        restoreSelection()
+        rebuild()
         local gameText = #gamePlaces > 0 and (", " .. (#tracks - mp3Count) .. " game music tracks in "
             .. #gamePlaces .. " places") or ""
         say("v" .. VERSION .. ": " .. mp3Count .. " library tracks" .. gameText .. ". /mmp to open.")
         local state = library.companionState()
         if state == "disabled" or state == "outdated" then
             say(library.musicHelp():gsub("\n\n", " "))
+        elseif state == "loaded" then
+            -- MaliMusic.toc from before 1.1 isn't grouped under the player in the AddOns list.
+            local getMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+            local ok, format = pcall(function()
+                return getMetadata and getMetadata("MaliMusic", "X-MaliMusic-Format")
+            end)
+            if getMetadata and ok and (tonumber(format) or 0) < 2 then
+                say("Tip: run the library updater once so MaliMusic shows under MaliMusicPlayer in the AddOns list.")
+            end
         end
-    elseif event == "PLAYER_LOGIN" then
         registerOptionsPanel()
         createMinimapButton()
     elseif event == "LOADING_SCREEN_ENABLED" then

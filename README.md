@@ -2,77 +2,76 @@
 
 **Your music. Your adventures. Your soundtrack.**
 
-MaliMusicPlayer is a **music player** for World of Warcraft. Play your own MP3 collection in place of the normal background soundtrack, or dig into the game's own music: every capital theme, zone track, dungeon score and tavern tune, sorted and ready to play. 🎧
+Swap WoW's background music for your own MP3 collection, or dive into the game's own soundtrack: capital themes, zone music, dungeon scores and tavern tunes, all sorted and ready to play. 🎧
 
-It has a full player window, a compact player that stays out of your way, and a clean look you can recolor to match your UI.
+A full player when you want it, a slim compact bar when you don't, and a look you can make your own.
 
-![Main player](docs/screenshots/main-player.png)
+## 🙋 Who's it for?
 
-## ✨ What it does
+Anyone with a music collection they'd love to quest to. And anyone who's ever wanted the Ironforge theme without flying to Ironforge. 🍺
 
-- 💿 **Your MP3s, in game.** Pick a track, shuffle your collection or repeat a favorite while you play.
-- 🗺️ **Game Music browser** *(WoW Forever)*. All 435 of the game's music tracks, sorted into a tree: Capitals › Darnassus, World Zones › Mount Hyjal, Dungeons & Raids › Naxxramas, Taverns & Inns and more. Intros and little stingers are filed where they belong.
-- 🔎 **Search everything.** Find a track, a place or a whole category as you type.
-- 📻 **Compact player.** A slim bar with the track, time, a progress line and your controls. Drag its corner to resize it.
-- 🎨 **Make it yours.** Mali Style (flat and dark, the default) or Classic (the standard Blizzard look). Pick your own colors, switch fonts and resize the window, all from the **Flavor** tab.
-- 🗺️ **Minimap button** and `/mmp` to open the player any time.
+<p align="center"><img src="docs/screenshots/main-player.png" alt="Main player"></p>
 
-![Game Music tab](docs/screenshots/game-music.png)
+## ✨ Features
 
-## 🙋 Who is it for?
+- 💿 **Your own music, built in.** Got MP3s? Drop them in and they play right inside the game. Shuffle, loop a favorite, and no extra app running in the background.
+- 🧭 **Minimap button** and `/mmp` to pop it open anytime.
+- 🔎 **Instant search.** Type a track, a place or a category and the list follows along.
 
-Players who have their own MP3s and want simple playback controls inside WoW instead of alt-tabbing to a separate music app. And anyone who has ever wanted to hear the Ironforge theme without flying to Ironforge. 🍺
+- 🗺️ **Game Music browser** *(WoW Forever)*. More than 400 of the game's music tracks, organized into Capitals, World Zones, Dungeons & Raids, Taverns & Inns and more. Intros and stingers sit right where they belong.
 
-![Compact player](docs/screenshots/compact-player.png)
+<p align="center"><img src="docs/screenshots/game-music.png" alt="Game Music tab"></p>
+
+- 📻 **Compact player.** A slim bar with the track, time, progress and controls. Drag the corner to size it.
+
+<p align="center"><img src="docs/screenshots/compact-player.png" alt="Compact player"></p>
+
+- 🎨 **Themes.** 12 color presets, from the default warlock Soulstone to Jazz 92 and Rave 99, plus your own saved color profiles, with a live preview as you tweak.
 
 ## 🚀 Getting started
 
-1. **Install the add-on.** Copy the `MaliMusicPlayer` folder into `World of Warcraft/<your game version>/Interface/AddOns/` (or install it with the CurseForge app). The `.toc` file should sit directly inside `MaliMusicPlayer`.
-2. **Add your MP3s.** Put them in `Interface/AddOns/MaliMusic/mp3`, right next to the add-on (create the `MaliMusic` and `mp3` folders if they aren't there yet; subfolders for your music are fine).
-3. **Build your library.** Run the updater for your system from the `MaliMusicPlayer` folder:
+1. **Install.** Use the CurseForge app, or copy the `MaliMusicPlayer` folder into `World of Warcraft/<your game version>/Interface/AddOns/`.
+2. **Add your MP3s** to `Interface/AddOns/MaliMusic/mp3`. Create the `MaliMusic` and `mp3` folders if they aren't there yet. Subfolders are fine.
+3. **Run the updater** from the `MaliMusicPlayer` folder:
    - 🪟 **Windows:** double-click `UpdateLibrary.cmd`
-   - 🍎 **macOS:** double-click `UpdateLibrary.command` (if macOS blocks it the first time, right-click it and choose **Open**)
+   - 🍎 **macOS:** double-click `UpdateLibrary.command` (first time, right-click it and choose **Open**)
    - 🐧 **Linux:** run `./UpdateLibrary.sh`
-4. **Play.** Restart WoW, make sure **MaliMusic** is enabled in the AddOns list, then type `/mmp` or click the minimap icon. 🎶
+4. **Play.** Restart WoW, make sure **MaliMusic** is enabled in the AddOns list, and type `/mmp`. 🎶
 
-Tip: run the updater before adding music and it creates the `MaliMusic/mp3` folder and opens it for you.
-
-Game Music needs no setup. It's ready the moment you log in. For now it's built for **WoW Forever**; in other versions of the game the tab shows a note, and your MP3 library works as usual.
+Game Music needs no setup at all. It's built for **WoW Forever**; on other versions your MP3 player works as usual.
 
 ### 🛡️ Your music is safe from updates
 
-Add-on managers like the CurseForge app replace the whole `MaliMusicPlayer` folder when they update it. That's why your music and playlist live in their own folder, `MaliMusic`, which updates never touch. It shows up in the AddOns list as **MaliMusic**.
+Add-on managers replace the whole `MaliMusicPlayer` folder on every update, so your music and playlist live next door in `MaliMusic`, which updates never touch.
 
 ```text
 Interface/AddOns/
-├── MaliMusicPlayer/   ← the add-on (updated by CurseForge)
-└── MaliMusic/         ← yours: made by the updater, never touched by updates
-    ├── mp3/           ← your music goes here
-    └── Library.lua    ← your track list
+├── MaliMusicPlayer/   ← the add-on (updates replace this)
+└── MaliMusic/         ← yours, never touched by updates
+    ├── mp3/           ← your music
+    └── Library.lua    ← your playlist
 ```
 
-Upgrading from a version before 1.0.1? Older versions kept music inside `MaliMusicPlayer/mp3`, which add-on managers delete on update, so back that folder up first. If you update by hand, the updater moves that music into `MaliMusic/mp3` for you; otherwise copy it back into `MaliMusic/mp3` once and run the updater.
+Coming from a version before 1.0.1? Those kept music in `MaliMusicPlayer/mp3`, so back it up before updating, then move it into `MaliMusic/mp3` and run the updater.
 
-Run the updater again whenever you add, remove or rename music. WoW can't scan folders itself, so the updater builds the track list for it. The macOS and Linux updaters need Python 3.8 or newer and nothing else; `GenerateLibrary.py` also works on Windows if you prefer it.
-
-Your music stays on your computer. You supply the collection, and MaliMusicPlayer provides the in-game controls.
+WoW can't scan folders on its own, so run the updater whenever you add, remove or rename music. The macOS and Linux updaters only need Python 3.8 or newer, and `GenerateLibrary.py` works on Windows too.
 
 ## 🎛️ Everyday use
 
 ```text
-Add MP3s → Run the updater → Launch WoW → Play
+Add MP3s → Run the updater → Restart WoW → Play
 ```
 
-- After adding new audio files, fully restart WoW. `/reload` is enough after the updater changes titles or durations.
-- Make sure WoW's **sound and music are on** with the music volume up. The player plays through the game's music channel, so it needs it. When music is off the speaker button turns red; click it to turn music back on.
-- Renaming, moving or removing a file breaks its spot in the playlist until you run the updater again.
+- New files need a full restart of WoW. If you only changed titles, `/reload` is enough.
+- The player uses WoW's music channel, so keep music on with the volume up. If it's off, the speaker button turns red; click it to switch music back on.
+- Song titles in Chinese, Japanese or Korean show in WoW's own font, since Inter doesn't include those characters.
 
 ### Game Music tips
 
-- Click a category or place to open it; the add-on remembers what you left open.
-- Previous / Next, Shuffle and Repeat stay inside the place you're listening to, like a little playlist.
-- Track lengths show `--:--` until a track has played all the way through once; after that the player remembers them.
-- Shared themes (Forest, Jungle, Mystery…) show up under every place that uses them.
+- Click a category or place to open it. The player remembers what you left open.
+- Previous, Next, Shuffle and Repeat stay within the place you're listening to, like a mini playlist.
+- Track lengths show `--:--` until a track has played through once.
+- Shared themes like Forest, Jungle and Mystery appear under every place that uses them.
 
 ### Slash commands
 
@@ -86,27 +85,27 @@ Add MP3s → Run the updater → Launch WoW → Play
 
 ## ❓ Why no pause or seek?
 
-MaliMusicPlayer works as a replacement soundtrack: it quiets WoW's background music and plays your track through the music channel. WoW lets add-ons start and stop sounds, but not pause them or jump to a position, so **Stop** ends a track and **Play** starts it from the top. That's a limit of what WoW gives add-ons, not a missing feature.
+WoW lets add-ons start and stop sounds, but not pause them or skip to a position. So **Stop** ends a track and **Play** starts it from the top.
 
 ## 🛠️ Troubleshooting
 
-**The add-on isn't in the AddOns list.** Check it's in the right game version's `Interface/AddOns` folder, and that extracting didn't add an extra folder level. The `.toc` must be directly inside `MaliMusicPlayer`.
+**Not in the AddOns list?** Make sure it's in the right game version's `Interface/AddOns` folder and that unzipping didn't add an extra folder. The `.toc` file belongs directly inside `MaliMusicPlayer`.
 
-**The library is empty or songs are missing.** Check your MP3s are in `MaliMusic/mp3`, run the updater, let it finish, and fully restart WoW. Make sure **MaliMusic** is enabled in the AddOns list; the Library tab tells you if it's off or out of date.
+**Library empty or songs missing?** Check your MP3s are in `MaliMusic/mp3`, run the updater, restart WoW and make sure **MaliMusic** is enabled. The Library tab tells you if it's off or out of date.
 
-**"MaliMusic" says it's out of date.** Run the updater again after updating the add-on or the game; it refreshes the folder's version info.
+**MaliMusic says it's out of date?** Run the updater again. It refreshes the folder after add-on or game updates.
 
-**A song is listed but won't play.** The file may have been moved or renamed since the library was built. Run the updater again and restart. Also check WoW's sound, music and volume settings.
+**A song won't play?** It was probably moved or renamed. Run the updater, restart, and double-check your music volume.
 
-**The updater fails.** Extract the zip first; don't run the updater from inside it. On macOS or Linux, if the launcher won't start, run `chmod +x UpdateLibrary.command UpdateLibrary.sh`. When reporting a problem, include the error text it shows.
+**The updater won't run?** Unzip first instead of running it from inside the zip. On macOS or Linux, run `chmod +x UpdateLibrary.command UpdateLibrary.sh` once.
 
 ## 🔄 Updating
 
-Update however you like; your music and playlist in `MaliMusic` are never touched. After an update, run the updater once so your music folder stays in step with the add-on. Your settings are saved by WoW and carry over.
+Update however you like. Your music, playlist and settings carry over. Running the updater once afterward keeps everything in step.
 
 ## 🐞 Reporting a problem
 
-Please include your WoW version and add-on version, what you were doing, what you expected and what happened, and any Lua error or updater error text. Steps to reproduce it help a lot. No need to send your music collection.
+Include your WoW and add-on versions, what happened, and any Lua or updater error text. Steps to reproduce help a ton.
 
 ## 💜 Credits
 
@@ -115,16 +114,14 @@ ZiRRuSH · Mali Gnosis · Malignosis
 **Thanks to:**
 
 - 🧭 **[wago.tools](https://wago.tools)** for its game data exports. The Game Music catalog was built from its ZoneMusic, ZoneIntroMusicTable, SoundKitEntry, AreaTable and WMOAreaTable tables.
-- 🔤 **[Inter](https://github.com/rsms/inter)** by The Inter Project Authors, the font used by Mali Style. MaliMusicPlayer ships with Inter's license, the SIL Open Font License 1.1, in `media/Inter-OFL.txt`. The bundled copy is converted to TrueType and trimmed to Latin, Greek and Cyrillic.
+- 🔤 **[Inter](https://github.com/rsms/inter)** by The Inter Project Authors, the font behind Mali Style. Its license, the SIL Open Font License 1.1, ships in `media/Inter-OFL.txt`. The bundled copy is converted to TrueType and trimmed to Latin, Greek and Cyrillic.
 
-The add-on icon (`media/icon.tga`), the icons in `media/icons` and `Silence.ogg` were made for MaliMusicPlayer and are covered by its MIT License.
+The add-on icon, the icons in `media/icons` and `Silence.ogg` were made for MaliMusicPlayer and fall under its MIT License.
 
-Game music and the few textures borrowed from the game client are © Blizzard Entertainment. MaliMusicPlayer contains no Blizzard audio; the Game Music tab plays music already installed with your game. MaliMusicPlayer is a fan-made add-on and is not affiliated with or endorsed by Blizzard Entertainment.
+Game music and the few textures borrowed from the game client are © Blizzard Entertainment. MaliMusicPlayer includes no Blizzard audio; the Game Music tab plays music already installed with your game. MaliMusicPlayer is a fan-made add-on, not affiliated with or endorsed by Blizzard Entertainment.
 
 ## 📜 License
 
-Released under the MIT License. See `LICENSE.MD` for the full terms.
+MIT License. See `LICENSE.MD` for the full terms. Use it, change it, share it; just keep the copyright and license notice with it.
 
-Use it, change it, share it. Keep the copyright and license notice with copies or substantial portions of the software.
-
-The MIT License covers MaliMusicPlayer's code, icons and sounds. It doesn't cover the music you add, the bundled Inter font (SIL Open Font License 1.1, see `media/Inter-OFL.txt`), or game music, which remains Blizzard's.
+The license covers MaliMusicPlayer's code, icons and sounds. It doesn't cover your music, the bundled Inter font (SIL OFL 1.1) or the game's music, which is Blizzard's.
